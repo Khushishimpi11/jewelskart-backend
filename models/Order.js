@@ -31,7 +31,8 @@ const orderSchema = new mongoose.Schema({
     productImage: { type: String, default: "" },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true },
-    total: { type: Number, required: true }
+    total: { type: Number, required: true },
+    size: { type: String, default: "" }  // ✅ ADDED: For ring size
   }],
   
   subtotal: { type: Number, required: true },

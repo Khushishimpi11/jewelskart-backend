@@ -33,6 +33,10 @@ const customerSchema = new mongoose.Schema({
   profilePicture: { type: String, default: "" },
   isGoogleUser: { type: Boolean, default: false },
   
+  // ✅ Forgot Password Fields (ADD THESE)
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date },
+  
   isActive: { type: Boolean, default: true },
   totalSpent: { type: Number, default: 0 },
   orderCount: { type: Number, default: 0 },
@@ -60,6 +64,7 @@ customerSchema.pre("save", async function(next) {
 
 // Compare password method
 customerSchema.methods.comparePassword = async function(password) {
+  if (!this.password) return false;
   return await bcrypt.compare(password, this.password);
 };
 

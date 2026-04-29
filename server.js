@@ -2,6 +2,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cloudinary = require("cloudinary").v2;
+const path = require("path");  // ✅ ADD THIS LINE
+
 require("dotenv").config();
 
 // Import notification cron jobs
@@ -29,6 +31,9 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ✅ FIXED: Static file serving for uploads (using path.join)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // ============ IMPORT MODELS ============
 const {
   HeroSlide,
@@ -49,6 +54,7 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const contactRoutes = require("./routes/contactRoutes");
 
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
@@ -57,6 +63,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/contact", contactRoutes);
 
 // ============ CMS ROUTES (DIRECT IN SERVER.JS FOR NOW) ============
 

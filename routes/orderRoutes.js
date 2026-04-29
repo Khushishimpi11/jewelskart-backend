@@ -30,7 +30,7 @@ function mapOrderStatusToTracking(orderStatus) {
   return mapping[orderStatus] || "CONFIRMED";
 }
 
-// ============ CREATE ORDER WITH RAZORPAY PAYMENT ============
+// ============ CREATE ORDER WITH SIZE SUPPORT ============
 router.post("/create", protect, customerOnly, async (req, res) => {
   try {
     const { items, shippingAddress, paymentMethod, notes, customerPhone } = req.body;
@@ -43,38 +43,42 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     const orderItems = [];
 
     for (const item of items) {
-  const product = await Product.findById(item.productId);
-  
-  if (!product) {
-    return res.status(404).json({ success: false, message: `Product not found` });
-  }
-  
-  if (product.stock < item.quantity) {
-    return res.status(400).json({
-      success: false,
-      message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
-    });
-  }
-  
-  const itemTotal = product.price * item.quantity;
-  subtotal += itemTotal;
-  
-  // ✅ FIXED: Use mainImage.url from Cloudinary structure
-  const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
-  
-  orderItems.push({
-    productId: product._id,
-    productName: product.name,
-    productSku: product.sku,
-    productImage: productImageUrl,  // ✅ Now gets correct image URL
-    quantity: item.quantity,
-    price: product.price,
-    total: itemTotal
-  });
-  
-  product.stock -= item.quantity;
-  await product.save();
-}
+      const product = await Product.findById(item.productId);
+      
+      if (!product) {
+        return res.status(404).json({ success: false, message: `Product not found` });
+      }
+      
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
+        });
+      }
+      
+      const itemTotal = product.price * item.quantity;
+      subtotal += itemTotal;
+      
+      const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
+      
+      // ✅ ADDED: Include size in order item
+      orderItems.push({
+        productId: product._id,
+        productName: product.name,
+        productSku: product.sku,
+         productImage: productImageUrl,
+        quantity: item.quantity,
+        price: product.price,
+        total: itemTotal,
+         size: item.size || item.selectedSize || ""   // ✅ SIZE FIELD ADDED
+      });
+      
+      // Log for debugging
+      console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}`);
+      
+      product.stock -= item.quantity;
+      await product.save();
+    }
     
     const shippingCharge = subtotal > 5000 ? 0 : 100;
     const tax = Math.round(subtotal * 0.05);
@@ -118,7 +122,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       tax,
       totalAmount,
       paymentMethod: paymentMethod || "ONLINE",
-      paymentStatus: "PENDING", // PENDING, SUCCESS, FAILED
+      paymentStatus: "PENDING",
       notes: notes || "",
       orderStatus: paymentMethod === "COD" ? "Confirmed" : "Pending Payment",
       statusHistory: [{
@@ -130,6 +134,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     });
     
     console.log(`✅ Order created: ${order.orderNumber} with customerId: ${order.customerId}`);
+    console.log(`📦 Order items with sizes:`, order.items.map(i => ({ name: i.productName, size: i.size })));
     
     const trackingId = `TRK${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const tracking = await Tracking.create({
@@ -168,7 +173,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     let razorpayOrder = null;
     if (paymentMethod !== "COD") {
       razorpayOrder = await razorpay.orders.create({
-        amount: totalAmount * 100,  // Convert to paise
+        amount: totalAmount * 100,
         currency: 'INR',
         receipt: `order_${order.orderNumber}`,
         payment_capture: 1,
@@ -179,7 +184,6 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         }
       });
       
-      // Update order with Razorpay order ID
       order.razorpayOrderId = razorpayOrder.id;
       await order.save();
       
@@ -215,7 +219,6 @@ router.post("/update-payment-status", protect, async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
     
-    // Verify signature
     const crypto = require('crypto');
     const body = razorpayOrderId + "|" + paymentId;
     const expectedSignature = crypto
@@ -227,7 +230,6 @@ router.post("/update-payment-status", protect, async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
     
-    // Update order
     order.paymentStatus = "SUCCESS";
     order.paymentId = paymentId;
     order.razorpayOrderId = razorpayOrderId;
@@ -242,7 +244,6 @@ router.post("/update-payment-status", protect, async (req, res) => {
     
     await order.save();
     
-    // Update tracking
     const tracking = await Tracking.findOne({ orderId: order._id });
     if (tracking) {
       tracking.status = "CONFIRMED";
@@ -364,7 +365,7 @@ router.get("/admin/all", protect, adminOnly, async (req, res) => {
   }
 });
 
-// ============ GET MY ORDERS ============
+// ============ GET MY ORDERS (With size field) ============
 router.get("/my-orders", protect, customerOnly, async (req, res) => {
   try {
     const customer = await Customer.findOne({ email: req.user.email });
@@ -375,6 +376,14 @@ router.get("/my-orders", protect, customerOnly, async (req, res) => {
     
     const orders = await Order.find({ customerId: customer._id })
       .sort({ createdAt: -1 });
+    
+    // Log to verify size is present
+    console.log(`📦 Found ${orders.length} orders for customer ${customer.email}`);
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        console.log(`  - ${item.productName}: Size = ${item.size || 'Not specified'}`);
+      });
+    });
     
     res.status(200).json({ success: true, orders });
   } catch (error) {
