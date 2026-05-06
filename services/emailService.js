@@ -16,6 +16,319 @@ const logoUrl = "https://res.cloudinary.com/dkawppfwu/image/upload/v1777292088/l
 // Brand Color
 const brandColor = "#612030";
 
+// ============ ORDER CONFIRMATION EMAIL TEMPLATE ============
+
+
+const getOrderConfirmationEmailHTML = (orderData) => {
+  const { orderNumber, customerName, items, totalAmount, shippingAddress, paymentMethod, orderDate, trackingLink } = orderData;
+  
+  // Generate items HTML
+  const itemsHTML = items.map(item => `
+    <tr style="border-bottom: 1px solid #e0e0e0;">
+      <td style="padding: 15px 10px; width: 80px;">
+        <img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;" />
+      </td>
+      <td style="padding: 15px 10px;">
+        <strong style="color: #333;">${item.name}</strong><br/>
+        <span style="color: #666; font-size: 12px;">Quantity: ${item.quantity}</span>
+        ${item.size ? `<br/><span style="color: #666; font-size: 12px;">Size: ${item.size}</span>` : ''}
+        <br/><span style="color: #888; font-size: 11px;">SKU: ${item.sku || 'N/A'}</span>
+      </td>
+      <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: ${brandColor};">
+        ₹${(item.price * item.quantity).toLocaleString('en-IN')}
+      </td>
+    </tr>
+  `).join('');
+
+  const formatDate = new Date(orderDate).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  const shippingAddressHTML = shippingAddress ? `
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
+      <h4 style="margin: 0 0 10px 0; color: ${brandColor};">📦 Shipping Address</h4>
+      <p style="margin: 0; color: #555; line-height: 1.6;">
+        ${shippingAddress.name || customerName}<br/>
+        ${shippingAddress.street || ''}<br/>
+        ${shippingAddress.city || ''} ${shippingAddress.state || ''} - ${shippingAddress.pincode || ''}<br/>
+        ${shippingAddress.country || 'India'}
+      </p>
+    </div>
+  ` : '';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmation - JewelsKart</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 650px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    .header {
+      background-color: ${brandColor};
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .header img {
+      height: 60px;
+      max-width: 200px;
+    }
+    .header h1 {
+      color: #ffffff;
+      margin: 10px 0 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 30px;
+    }
+    .order-info {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 25px;
+    }
+    .order-info p {
+      margin: 5px 0;
+      color: #555;
+    }
+    .order-info strong {
+      color: ${brandColor};
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th {
+      text-align: left;
+      padding: 12px 10px;
+      background-color: ${brandColor};
+      color: white;
+    }
+    
+    /* ✅ TABLE-BASED PRICE SUMMARY - 100% EMAIL COMPATIBLE */
+    .price-table {
+      width: 100%;
+      background: #f8f9fa;
+      border-radius: 12px;
+      margin: 25px 0;
+      border: 1px solid #e0e0e0;
+    }
+    .price-table td {
+      padding: 12px 20px;
+    }
+    .price-label {
+      text-align: left;
+      color: #555;
+      font-size: 14px;
+    }
+    .price-value {
+      text-align: right;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+    .total-row td {
+      border-top: 2px solid #e0e0e0;
+      padding-top: 15px;
+      padding-bottom: 15px;
+    }
+    .total-label {
+      text-align: left;
+      font-size: 18px;
+      font-weight: bold;
+      color: ${brandColor};
+    }
+    .total-value {
+      text-align: right;
+      font-size: 22px;
+      font-weight: bold;
+      color: ${brandColor};
+    }
+    
+    .tracking-btn {
+      display: inline-block;
+      background-color: ${brandColor};
+      color: white;
+      padding: 12px 30px;
+      text-decoration: none;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    .delivery-box {
+      background-color: #e8f5e9;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #888;
+    }
+    @media only screen and (max-width: 600px) {
+      .content { padding: 15px; }
+      th, td { padding: 8px 5px; font-size: 12px; }
+      td img { width: 40px; height: 40px; }
+      .price-table td { padding: 8px 15px; }
+      .total-label { font-size: 16px; }
+      .total-value { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="${logoUrl}" alt="JewelsKart">
+      <h1>Order Confirmed! 🎉</h1>
+    </div>
+    
+    <div class="content">
+      <h2 style="color: ${brandColor};">Hello ${customerName || 'Customer'}!</h2>
+      <p style="color: #555; line-height: 1.6;">Thank you for shopping with JewelsKart! Your order has been confirmed and will be processed soon.</p>
+      
+      <div class="order-info">
+        <p><strong>📋 Order Number:</strong> #${orderNumber}</p>
+        <p><strong>📅 Order Date:</strong> ${formatDate}</p>
+        <p><strong>💳 Payment Method:</strong> ${paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online Payment'}</p>
+        <p><strong>📧 Email:</strong> ${orderData.customerEmail || 'N/A'}</p>
+        <p><strong>📞 Phone:</strong> ${orderData.customerPhone || 'N/A'}</p>
+      </div>
+      
+      ${shippingAddressHTML}
+      
+      <h3 style="color: ${brandColor}; margin: 20px 0 10px;">🛍️ Order Items</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Details</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHTML}
+        </tbody>
+      </table>
+      
+      <!-- ✅ TABLE-BASED PRICE SUMMARY - PROPER LEFT-RIGHT ALIGNMENT -->
+      <table class="price-table" cellpadding="0" cellspacing="0" style="width: 100%; background: #f8f9fa; border-radius: 12px; border: 1px solid #e0e0e0;">
+        <tr>
+          <td class="price-label" style="text-align: left; padding: 12px 20px; color: #555;">Subtotal:</td>
+          <td class="price-value" style="text-align: right; padding: 12px 20px; font-weight: 600;">₹${orderData.subtotal?.toLocaleString('en-IN') || '0'}</td>
+        </tr>
+        <tr>
+          <td class="price-label" style="text-align: left; padding: 8px 20px; color: #555;">Shipping:</td>
+          <td class="price-value" style="text-align: right; padding: 8px 20px; font-weight: 600;">₹${orderData.shippingCharge?.toLocaleString('en-IN') || '0'}</td>
+        </tr>
+        <tr>
+          <td class="price-label" style="text-align: left; padding: 8px 20px; color: #555;">Tax (GST):</td>
+          <td class="price-value" style="text-align: right; padding: 8px 20px; font-weight: 600;">₹${orderData.tax?.toLocaleString('en-IN') || '0'}</td>
+        </tr>
+        <tr class="total-row">
+          <td class="total-label" style="text-align: left; padding: 15px 20px; border-top: 2px solid #e0e0e0; font-size: 18px; font-weight: bold; color: ${brandColor};">Total Amount:</td>
+          <td class="total-value" style="text-align: right; padding: 15px 20px; border-top: 2px solid #e0e0e0; font-size: 22px; font-weight: bold; color: ${brandColor};">₹${totalAmount.toLocaleString('en-IN')}</td>
+        </tr>
+      </table>
+      
+      <div style="text-align: center;">
+        <a href="${trackingLink}" class="tracking-btn">🔍 Track Your Order</a>
+      </div>
+      
+      <div class="delivery-box">
+        <p style="margin: 0; color: #2e7d32; font-size: 14px;">
+          <strong>📦 Estimated Delivery:</strong> ${orderData.estimatedDelivery || '5-7 business days'}
+        </p>
+        <p style="margin: 5px 0 0; color: #555; font-size: 12px;">
+          You will receive another email when your order is shipped.
+        </p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>&copy; 2024 JewelsKart. All rights reserved.</p>
+      <p>Need help? Contact us at <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+      <p>Visit our website: <a href="${process.env.WEBSITE_URL || 'http://localhost:8081'}" style="color: ${brandColor};">www.jewelskartindia.com</a></p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+};
+
+// ============ SEND ORDER CONFIRMATION EMAIL ============
+
+const sendOrderConfirmationEmail = async (orderData) => {
+  try {
+    const { orderNumber, customerEmail, customerName, items, totalAmount, shippingAddress, paymentMethod, createdAt } = orderData;
+    
+const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;    
+    const estimatedDelivery = new Date();
+    estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
+    
+    const emailData = {
+      orderNumber,
+      customerName: customerName || 'Customer',
+      customerEmail,
+      customerPhone: orderData.customerPhone,
+      items: items.map(item => ({
+        name: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+        size: item.size,
+        image: item.productImage,
+        sku: item.productSku
+      })),
+      subtotal: orderData.subtotal,
+      shippingCharge: orderData.shippingCharge,
+      tax: orderData.tax,
+      totalAmount,
+      shippingAddress,
+      paymentMethod,
+      orderDate: createdAt,
+      trackingLink,
+      estimatedDelivery: estimatedDelivery.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+    };
+    
+    const htmlContent = getOrderConfirmationEmailHTML(emailData);
+    const textContent = `Order Confirmation - JewelsKart\n\nOrder #${orderNumber}\nTotal: ₹${totalAmount.toLocaleString('en-IN')}\nTrack your order: ${trackingLink}`;
+    
+    await transporter.sendMail({
+      from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
+      to: customerEmail,
+      subject: `✨ Order Confirmed! #${orderNumber} - JewelsKart`,
+      text: textContent,
+      html: htmlContent,
+    });
+    
+    console.log(`✅ Order confirmation email sent to ${customerEmail} for order #${orderNumber}`);
+    return true;
+  } catch (error) {
+    console.error("❌ Order confirmation email error:", error.message);
+    return false;
+  }
+};
+
 // ============ ADMIN EMAIL TEMPLATES ============
 
 const getAdminPasswordResetEmailHTML = (name, resetUrl) => {
@@ -106,7 +419,7 @@ const getCustomerPasswordResetEmailHTML = (name, resetUrl) => {
             </td>
           </tr>
         </table>
-      </td>
+       </td>
     </tr>
   </table>
 </body>
@@ -150,20 +463,23 @@ const getCustomerWelcomeEmailHTML = (name) => {
               <hr>
               <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
             </td>
-          </tr>
+          具体
           <tr>
             <td style="background-color: #f8f9fa; padding: 20px; text-align: center;">
               <p style="color: #888;">&copy; 2024 JewelsKart. All rights reserved.</p>
             </td>
           </tr>
         </table>
-      </td>
-    </table>
+       </td>
+    </tr>
   </table>
 </body>
 </html>
   `;
 };
+
+
+
 
 // ============ SEND EMAIL FUNCTIONS ============
 
@@ -260,7 +576,7 @@ const sendAdminWelcomeEmail = async (email, name) => {
             </td>
           </tr>
         </table>
-      <tr>
+       </td>
     </tr>
   </table>
 </body>
@@ -284,6 +600,8 @@ const sendAdminWelcomeEmail = async (email, name) => {
 };
 
 module.exports = {
+  // Order email
+  sendOrderConfirmationEmail,
   // Admin emails
   sendAdminPasswordResetEmail,
   sendAdminWelcomeEmail,

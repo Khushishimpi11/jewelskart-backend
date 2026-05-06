@@ -42,6 +42,21 @@ router.put('/admin/hero-slide/:id', auth, async (req, res) => {
   }
 });
 
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/hero-slide/:id', auth, async (req, res) => {
+  try {
+    const updated = await HeroSlide.findByIdAndUpdate(
+      req.params.id, 
+      { $set: req.body },  // Sirf jo fields bheji hain wahi update hongi
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Slide not found' });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 router.delete('/admin/hero-slide/:id', auth, async (req, res) => {
   try {
     await HeroSlide.findByIdAndDelete(req.params.id);
@@ -74,6 +89,21 @@ router.post('/admin/banner-category', auth, async (req, res) => {
 router.put('/admin/banner-category/:id', auth, async (req, res) => {
   try {
     const updated = await BannerCategory.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/banner-category/:id', auth, async (req, res) => {
+  try {
+    const updated = await BannerCategory.findByIdAndUpdate(
+      req.params.id, 
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Category not found' });
     res.json(updated);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -173,6 +203,27 @@ router.post('/admin/about-section', auth, async (req, res) => {
   }
 });
 
+// ✅ NEW: PATCH route for partial update (About Section - single document)
+router.patch('/admin/about-section', auth, async (req, res) => {
+  try {
+    let about = await AboutSection.findOne();
+    if (!about) {
+      about = new AboutSection(req.body);
+    } else {
+      // Sirf received fields update karo
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          about[key] = req.body[key];
+        }
+      });
+    }
+    await about.save();
+    res.json(about);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // ============ PARTNER SECTION ============
 router.get('/partner-section', async (req, res) => {
   try {
@@ -193,6 +244,26 @@ router.post('/admin/partner-section', auth, async (req, res) => {
       partner = new PartnerSection(req.body);
       await partner.save();
     }
+    res.json(partner);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/partner-section', auth, async (req, res) => {
+  try {
+    let partner = await PartnerSection.findOne();
+    if (!partner) {
+      partner = new PartnerSection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          partner[key] = req.body[key];
+        }
+      });
+    }
+    await partner.save();
     res.json(partner);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -225,6 +296,26 @@ router.post('/admin/promo-banner', auth, async (req, res) => {
   }
 });
 
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/promo-banner', auth, async (req, res) => {
+  try {
+    let promo = await PromoBanner.findOne();
+    if (!promo) {
+      promo = new PromoBanner(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          promo[key] = req.body[key];
+        }
+      });
+    }
+    await promo.save();
+    res.json(promo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // ============ JEWELLERY SECTION (Stylish Design) ============
 router.get('/jewellery-section', async (req, res) => {
   try {
@@ -251,6 +342,26 @@ router.post('/admin/jewellery-section', auth, async (req, res) => {
   }
 });
 
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/jewellery-section', auth, async (req, res) => {
+  try {
+    let jewellery = await JewellerySection.findOne();
+    if (!jewellery) {
+      jewellery = new JewellerySection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          jewellery[key] = req.body[key];
+        }
+      });
+    }
+    await jewellery.save();
+    res.json(jewellery);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // ============ TESTIMONIAL SECTION ============
 router.get('/testimonial-section', async (req, res) => {
   try {
@@ -271,6 +382,26 @@ router.post('/admin/testimonial-section', auth, async (req, res) => {
       testimonial = new TestimonialSection(req.body);
       await testimonial.save();
     }
+    res.json(testimonial);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ NEW: PATCH route for partial update
+router.patch('/admin/testimonial-section', auth, async (req, res) => {
+  try {
+    let testimonial = await TestimonialSection.findOne();
+    if (!testimonial) {
+      testimonial = new TestimonialSection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          testimonial[key] = req.body[key];
+        }
+      });
+    }
+    await testimonial.save();
     res.json(testimonial);
   } catch (error) {
     res.status(400).json({ message: error.message });

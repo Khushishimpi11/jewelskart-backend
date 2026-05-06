@@ -15,7 +15,7 @@ const generateToken = (id, email, role, name, customerId) => {
   return jwt.sign(
     { id, email, role, name, customerId },
     process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-    { expiresIn: "7d" }
+    { expiresIn: "90d" }
   );
 };
 
@@ -190,7 +190,7 @@ router.post("/admin/google", async (req, res) => {
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "7d" }
+      { expiresIn: "90d" }
     );
     
     res.status(200).json({
@@ -803,7 +803,7 @@ router.post("/admin/register", async (req, res) => {
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "7d" }
+      { expiresIn: "90d" }
     );
     
     res.status(201).json({
@@ -851,7 +851,7 @@ router.post("/admin/login", async (req, res) => {
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "7d" }
+      { expiresIn: "90d" }
     );
     
     res.status(200).json({

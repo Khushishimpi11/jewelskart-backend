@@ -6,6 +6,7 @@ const Tracking = require("../models/Tracking");
 const Customer = require("../models/Customer");
 const { protect, adminOnly, customerOnly } = require("../middleware/auth");
 const Razorpay = require("razorpay");
+const { sendOrderConfirmationEmail } = require("../services/emailService");
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -61,19 +62,17 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       
       const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
       
-      // ✅ ADDED: Include size in order item
       orderItems.push({
         productId: product._id,
         productName: product.name,
         productSku: product.sku,
-         productImage: productImageUrl,
+        productImage: productImageUrl,
         quantity: item.quantity,
         price: product.price,
         total: itemTotal,
-         size: item.size || item.selectedSize || ""   // ✅ SIZE FIELD ADDED
+        size: item.size || item.selectedSize || ""
       });
       
-      // Log for debugging
       console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}`);
       
       product.stock -= item.quantity;
@@ -169,6 +168,41 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       }
     });
     
+    // ============ SEND ORDER CONFIRMATION EMAIL ============
+    // Send email only for COD orders (payment completed) or will send after payment for online
+    if (paymentMethod === "COD") {
+      try {
+        const emailItems = orderItems.map(item => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          price: item.price,
+          size: item.size || "",
+          productImage: item.productImage || "",
+          productSku: item.productSku
+        }));
+        
+        await sendOrderConfirmationEmail({
+          orderNumber: order.orderNumber,
+          customerEmail: customer.email,
+          customerName: customer.name,
+          customerPhone: customerPhone || customer.phone || "",
+          items: emailItems,
+          subtotal: subtotal,
+          shippingCharge: shippingCharge,
+          tax: tax,
+          totalAmount: totalAmount,
+          shippingAddress: shippingAddress,
+          paymentMethod: paymentMethod,
+          createdAt: order.createdAt,
+           trackingId: tracking.trackingId 
+        });
+        console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
+      } catch (emailError) {
+        console.error("❌ Email sending failed:", emailError.message);
+        // Don't block order creation if email fails
+      }
+    }
+    
     // If payment method is online, create Razorpay order
     let razorpayOrder = null;
     if (paymentMethod !== "COD") {
@@ -255,6 +289,40 @@ router.post("/update-payment-status", protect, async (req, res) => {
         date: new Date()
       });
       await tracking.save();
+    }
+    
+    // ============ SEND ORDER CONFIRMATION EMAIL FOR ONLINE PAYMENT ============
+    try {
+      // Get customer details
+      const customer = await Customer.findById(order.customerId);
+      
+      const emailItems = order.items.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+        size: item.size || "",
+        productImage: item.productImage || "",
+        productSku: item.productSku
+      }));
+      
+      await sendOrderConfirmationEmail({
+        orderNumber: order.orderNumber,
+        customerEmail: order.customerEmail,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone || customer?.phone || "",
+        items: emailItems,
+        subtotal: order.subtotal,
+        shippingCharge: order.shippingCharge,
+        tax: order.tax,
+        totalAmount: order.totalAmount,
+        shippingAddress: order.shippingAddress,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt
+      });
+      console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
+    } catch (emailError) {
+      console.error("❌ Email sending failed:", emailError.message);
+      // Don't block if email fails
     }
     
     console.log(`✅ Payment successful for order ${order.orderNumber}. Payment ID: ${paymentId}`);
@@ -377,7 +445,6 @@ router.get("/my-orders", protect, customerOnly, async (req, res) => {
     const orders = await Order.find({ customerId: customer._id })
       .sort({ createdAt: -1 });
     
-    // Log to verify size is present
     console.log(`📦 Found ${orders.length} orders for customer ${customer.email}`);
     orders.forEach(order => {
       order.items.forEach(item => {

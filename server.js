@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cloudinary = require("cloudinary").v2;
-const path = require("path");  // ✅ ADD THIS LINE
+const path = require("path");
 
 require("dotenv").config();
 
@@ -31,7 +31,7 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ✅ FIXED: Static file serving for uploads (using path.join)
+// Static file serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ============ IMPORT MODELS ============
@@ -65,7 +65,9 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/contact", contactRoutes);
 
-// ============ CMS ROUTES (DIRECT IN SERVER.JS FOR NOW) ============
+// ============ CMS ROUTES (DIRECT IN SERVER.JS) ============
+
+// ============ GET ROUTES ============
 
 // Hero Slides
 app.get("/api/cms/hero-slides", async (req, res) => {
@@ -155,7 +157,7 @@ app.get("/api/cms/testimonial-section", async (req, res) => {
   }
 });
 
-// ============ ADMIN CMS ROUTES ============
+// ============ ADMIN CMS ROUTES (POST, PUT, DELETE) ============
 
 // Hero Slides Admin
 app.post("/api/cms/admin/hero-slide", async (req, res) => {
@@ -314,6 +316,138 @@ app.post("/api/cms/admin/testimonial-section", async (req, res) => {
       testimonial = new TestimonialSection(req.body);
       await testimonial.save();
     }
+    res.json(testimonial);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ============ ✅ NEW: PATCH ROUTES FOR PARTIAL UPDATE ============
+
+// Hero Slides PATCH (Partial Update)
+app.patch("/api/cms/admin/hero-slide/:id", async (req, res) => {
+  try {
+    const updated = await HeroSlide.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: "Slide not found" });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Banner Categories PATCH (Partial Update)
+app.patch("/api/cms/admin/banner-category/:id", async (req, res) => {
+  try {
+    const updated = await BannerCategory.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: "Category not found" });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// About Section PATCH (Partial Update)
+app.patch("/api/cms/admin/about-section", async (req, res) => {
+  try {
+    let about = await AboutSection.findOne();
+    if (!about) {
+      about = new AboutSection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          about[key] = req.body[key];
+        }
+      });
+    }
+    await about.save();
+    res.json(about);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Partner Section PATCH (Partial Update)
+app.patch("/api/cms/admin/partner-section", async (req, res) => {
+  try {
+    let partner = await PartnerSection.findOne();
+    if (!partner) {
+      partner = new PartnerSection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          partner[key] = req.body[key];
+        }
+      });
+    }
+    await partner.save();
+    res.json(partner);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Promo Banner PATCH (Partial Update)
+app.patch("/api/cms/admin/promo-banner", async (req, res) => {
+  try {
+    let promo = await PromoBanner.findOne();
+    if (!promo) {
+      promo = new PromoBanner(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          promo[key] = req.body[key];
+        }
+      });
+    }
+    await promo.save();
+    res.json(promo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Jewellery Section PATCH (Partial Update)
+app.patch("/api/cms/admin/jewellery-section", async (req, res) => {
+  try {
+    let jewellery = await JewellerySection.findOne();
+    if (!jewellery) {
+      jewellery = new JewellerySection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          jewellery[key] = req.body[key];
+        }
+      });
+    }
+    await jewellery.save();
+    res.json(jewellery);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Testimonial Section PATCH (Partial Update)
+app.patch("/api/cms/admin/testimonial-section", async (req, res) => {
+  try {
+    let testimonial = await TestimonialSection.findOne();
+    if (!testimonial) {
+      testimonial = new TestimonialSection(req.body);
+    } else {
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          testimonial[key] = req.body[key];
+        }
+      });
+    }
+    await testimonial.save();
     res.json(testimonial);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -550,15 +684,24 @@ const server = app.listen(PORT, () => {
   console.log(`   GET  /api/cms/promo-banner`);
   console.log(`   GET  /api/cms/jewellery-section`);
   console.log(`   GET  /api/cms/testimonial-section`);
-  console.log(`☁️ Cloudinary Test: http://localhost:${PORT}/api/cloudinary-test`);
-  console.log(`\n📢 NOTIFICATION TYPES (13):`);
-  console.log(`   🔴 Out of Stock | Low Stock | Back in Stock`);
-  console.log(`   🟠 New Order | Order Cancelled | Payment Received | Payment Failed`);
-  console.log(`   🟡 Return Request | Exchange Request | Return/Exchange Approved | Return/Exchange Rejected`);
-  console.log(`   🟢 New Customer | Customer Complaint`);
-  console.log(`\n⏰ CRON JOBS:`);
-  console.log(`   Low stock check: Every day at 10:00 AM & 6:00 PM`);
-  console.log(`   Out of stock check: Every hour`);
+  console.log(`\n📝 CMS ADMIN APIs:`);
+  console.log(`   POST /api/cms/admin/hero-slide`);
+  console.log(`   PUT  /api/cms/admin/hero-slide/:id`);
+  console.log(`   PATCH /api/cms/admin/hero-slide/:id ✅ NEW`);
+  console.log(`   POST /api/cms/admin/banner-category`);
+  console.log(`   PUT  /api/cms/admin/banner-category/:id`);
+  console.log(`   PATCH /api/cms/admin/banner-category/:id ✅ NEW`);
+  console.log(`   POST /api/cms/admin/about-section`);
+  console.log(`   PATCH /api/cms/admin/about-section ✅ NEW`);
+  console.log(`   POST /api/cms/admin/partner-section`);
+  console.log(`   PATCH /api/cms/admin/partner-section ✅ NEW`);
+  console.log(`   POST /api/cms/admin/promo-banner`);
+  console.log(`   PATCH /api/cms/admin/promo-banner ✅ NEW`);
+  console.log(`   POST /api/cms/admin/jewellery-section`);
+  console.log(`   PATCH /api/cms/admin/jewellery-section ✅ NEW`);
+  console.log(`   POST /api/cms/admin/testimonial-section`);
+  console.log(`   PATCH /api/cms/admin/testimonial-section ✅ NEW`);
+  console.log(`\n☁️ Cloudinary Test: http://localhost:${PORT}/api/cloudinary-test`);
   console.log(`\n${"=".repeat(60)}`);
 });
 
