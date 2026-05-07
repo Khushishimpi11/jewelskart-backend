@@ -169,7 +169,6 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     });
     
     // ============ SEND ORDER CONFIRMATION EMAIL ============
-    // Send email only for COD orders (payment completed) or will send after payment for online
     if (paymentMethod === "COD") {
       try {
         const emailItems = orderItems.map(item => ({
@@ -194,12 +193,11 @@ router.post("/create", protect, customerOnly, async (req, res) => {
           shippingAddress: shippingAddress,
           paymentMethod: paymentMethod,
           createdAt: order.createdAt,
-           trackingId: tracking.trackingId 
+          trackingId: tracking.trackingId 
         });
         console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
       } catch (emailError) {
         console.error("❌ Email sending failed:", emailError.message);
-        // Don't block order creation if email fails
       }
     }
     
@@ -291,9 +289,8 @@ router.post("/update-payment-status", protect, async (req, res) => {
       await tracking.save();
     }
     
-    // ============ SEND ORDER CONFIRMATION EMAIL FOR ONLINE PAYMENT ============
+    // Send order confirmation email for online payment
     try {
-      // Get customer details
       const customer = await Customer.findById(order.customerId);
       
       const emailItems = order.items.map(item => ({
@@ -322,7 +319,6 @@ router.post("/update-payment-status", protect, async (req, res) => {
       console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
     } catch (emailError) {
       console.error("❌ Email sending failed:", emailError.message);
-      // Don't block if email fails
     }
     
     console.log(`✅ Payment successful for order ${order.orderNumber}. Payment ID: ${paymentId}`);
@@ -488,7 +484,7 @@ router.get("/tracking/:trackingId", protect, async (req, res) => {
   }
 });
 
-// ============ DELETE ORDER ============
+// ============ DELETE ORDER (UPDATED with Cascade) ============
 router.delete("/admin/:id", protect, adminOnly, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
@@ -496,20 +492,56 @@ router.delete("/admin/:id", protect, adminOnly, async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
     
+    console.log(`🗑️ Deleting order: ${order.orderNumber} for customer: ${order.customerEmail}`);
+    
+    // Delete tracking record
     await Tracking.findOneAndDelete({ orderId: order._id });
+    
+    // Delete the order
     await order.deleteOne();
     
+    // Update customer stats
     const customer = await Customer.findOne({ email: order.customerEmail });
     if (customer) {
       const allOrders = await Order.find({ customerEmail: customer.email });
       customer.orderCount = allOrders.length;
       customer.totalSpent = allOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
       await customer.save();
+      console.log(`✅ Updated customer stats: ${customer.name} - ${customer.orderCount} orders, ₹${customer.totalSpent}`);
     }
     
-    res.status(200).json({ success: true, message: "Order deleted successfully" });
+    res.status(200).json({ 
+      success: true, 
+      message: "Order deleted successfully",
+      deletedOrderId: order._id,
+      deletedOrderNumber: order.orderNumber
+    });
   } catch (error) {
     console.error("Delete order error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ DELETE ALL ORDERS (Admin) ============
+router.delete("/admin/delete-all", protect, adminOnly, async (req, res) => {
+  try {
+    console.log("🗑️ Deleting all orders...");
+    
+    const result = await Order.deleteMany({});
+    await Tracking.deleteMany({});
+    
+    // Update all customers stats to 0
+    await Customer.updateMany({}, { $set: { orderCount: 0, totalSpent: 0 } });
+    
+    console.log(`✅ Deleted ${result.deletedCount} orders`);
+    
+    res.status(200).json({ 
+      success: true, 
+      message: `All ${result.deletedCount} orders deleted successfully`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error("Delete all orders error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

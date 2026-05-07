@@ -17,12 +17,9 @@ const logoUrl = "https://res.cloudinary.com/dkawppfwu/image/upload/v1777292088/l
 const brandColor = "#612030";
 
 // ============ ORDER CONFIRMATION EMAIL TEMPLATE ============
-
-
 const getOrderConfirmationEmailHTML = (orderData) => {
   const { orderNumber, customerName, items, totalAmount, shippingAddress, paymentMethod, orderDate, trackingLink } = orderData;
   
-  // Generate items HTML
   const itemsHTML = items.map(item => `
     <tr style="border-bottom: 1px solid #e0e0e0;">
       <td style="padding: 15px 10px; width: 80px;">
@@ -121,8 +118,6 @@ const getOrderConfirmationEmailHTML = (orderData) => {
       background-color: ${brandColor};
       color: white;
     }
-    
-    /* ✅ TABLE-BASED PRICE SUMMARY - 100% EMAIL COMPATIBLE */
     .price-table {
       width: 100%;
       background: #f8f9fa;
@@ -161,7 +156,6 @@ const getOrderConfirmationEmailHTML = (orderData) => {
       font-weight: bold;
       color: ${brandColor};
     }
-    
     .tracking-btn {
       display: inline-block;
       background-color: ${brandColor};
@@ -231,28 +225,27 @@ const getOrderConfirmationEmailHTML = (orderData) => {
         </tbody>
       </table>
       
-      <!-- ✅ TABLE-BASED PRICE SUMMARY - PROPER LEFT-RIGHT ALIGNMENT -->
-      <table class="price-table" cellpadding="0" cellspacing="0" style="width: 100%; background: #f8f9fa; border-radius: 12px; border: 1px solid #e0e0e0;">
+      <table class="price-table" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="price-label" style="text-align: left; padding: 12px 20px; color: #555;">Subtotal:</td>
-          <td class="price-value" style="text-align: right; padding: 12px 20px; font-weight: 600;">₹${orderData.subtotal?.toLocaleString('en-IN') || '0'}</td>
+          <td class="price-label">Subtotal:</td>
+          <td class="price-value">₹${orderData.subtotal?.toLocaleString('en-IN') || '0'}</td>
         </tr>
         <tr>
-          <td class="price-label" style="text-align: left; padding: 8px 20px; color: #555;">Shipping:</td>
-          <td class="price-value" style="text-align: right; padding: 8px 20px; font-weight: 600;">₹${orderData.shippingCharge?.toLocaleString('en-IN') || '0'}</td>
+          <td class="price-label">Shipping:</td>
+          <td class="price-value">₹${orderData.shippingCharge?.toLocaleString('en-IN') || '0'}</td>
         </tr>
         <tr>
-          <td class="price-label" style="text-align: left; padding: 8px 20px; color: #555;">Tax (GST):</td>
-          <td class="price-value" style="text-align: right; padding: 8px 20px; font-weight: 600;">₹${orderData.tax?.toLocaleString('en-IN') || '0'}</td>
+          <td class="price-label">Tax (GST):</td>
+          <td class="price-value">₹${orderData.tax?.toLocaleString('en-IN') || '0'}</td>
         </tr>
         <tr class="total-row">
-          <td class="total-label" style="text-align: left; padding: 15px 20px; border-top: 2px solid #e0e0e0; font-size: 18px; font-weight: bold; color: ${brandColor};">Total Amount:</td>
-          <td class="total-value" style="text-align: right; padding: 15px 20px; border-top: 2px solid #e0e0e0; font-size: 22px; font-weight: bold; color: ${brandColor};">₹${totalAmount.toLocaleString('en-IN')}</td>
+          <td class="total-label">Total Amount:</td>
+          <td class="total-value">₹${totalAmount.toLocaleString('en-IN')}</td>
         </tr>
       </table>
       
       <div style="text-align: center;">
-        <a href="${trackingLink}" class="tracking-btn">🔍 Track Your Order</a>
+        <a href="${trackingLink}" class="tracking-btn"> Track Your Order</a>
       </div>
       
       <div class="delivery-box">
@@ -276,13 +269,19 @@ const getOrderConfirmationEmailHTML = (orderData) => {
   `;
 };
 
-// ============ SEND ORDER CONFIRMATION EMAIL ============
-
+// ============ SEND ORDER CONFIRMATION EMAIL (FIXED) ============
 const sendOrderConfirmationEmail = async (orderData) => {
+  console.log("📧 ===== SENDING ORDER CONFIRMATION EMAIL =====");
+  console.log("📧 Order Number:", orderData.orderNumber);
+  console.log("📧 Customer Email:", orderData.customerEmail);
+  
   try {
     const { orderNumber, customerEmail, customerName, items, totalAmount, shippingAddress, paymentMethod, createdAt } = orderData;
     
-const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;    
+    // ✅ FIXED: Use orderNumber as trackingId (not undefined variable)
+    const trackingId = orderNumber;  // 👈 THIS WAS MISSING!
+    const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;
+    
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
     
@@ -313,24 +312,28 @@ const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/trac
     const htmlContent = getOrderConfirmationEmailHTML(emailData);
     const textContent = `Order Confirmation - JewelsKart\n\nOrder #${orderNumber}\nTotal: ₹${totalAmount.toLocaleString('en-IN')}\nTrack your order: ${trackingLink}`;
     
-    await transporter.sendMail({
-      from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
+    const info = await transporter.sendMail({
+      from: `"JewelsKart" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: customerEmail,
       subject: `✨ Order Confirmed! #${orderNumber} - JewelsKart`,
       text: textContent,
       html: htmlContent,
     });
     
-    console.log(`✅ Order confirmation email sent to ${customerEmail} for order #${orderNumber}`);
+    console.log(`✅ Email SENT Successfully!`);
+    console.log(`✅ Message ID: ${info.messageId}`);
+    console.log(`✅ To: ${customerEmail}`);
     return true;
+    
   } catch (error) {
-    console.error("❌ Order confirmation email error:", error.message);
+    console.error("❌ EMAIL SEND FAILED:");
+    console.error("❌ Error:", error.message);
+    console.error("❌ Code:", error.code);
     return false;
   }
 };
 
 // ============ ADMIN EMAIL TEMPLATES ============
-
 const getAdminPasswordResetEmailHTML = (name, resetUrl) => {
   return `
 <!DOCTYPE html>
@@ -379,7 +382,6 @@ const getAdminPasswordResetEmailHTML = (name, resetUrl) => {
 };
 
 // ============ CUSTOMER EMAIL TEMPLATES ============
-
 const getCustomerPasswordResetEmailHTML = (name, resetUrl) => {
   return `
 <!DOCTYPE html>
@@ -419,7 +421,7 @@ const getCustomerPasswordResetEmailHTML = (name, resetUrl) => {
             </td>
           </tr>
         </table>
-       </td>
+      </td>
     </tr>
   </table>
 </body>
@@ -463,23 +465,20 @@ const getCustomerWelcomeEmailHTML = (name) => {
               <hr>
               <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
             </td>
-          具体
+          </tr>
           <tr>
             <td style="background-color: #f8f9fa; padding: 20px; text-align: center;">
               <p style="color: #888;">&copy; 2024 JewelsKart. All rights reserved.</p>
             </td>
           </tr>
         </table>
-       </td>
+      </td>
     </tr>
   </table>
 </body>
 </html>
   `;
 };
-
-
-
 
 // ============ SEND EMAIL FUNCTIONS ============
 
@@ -576,7 +575,7 @@ const sendAdminWelcomeEmail = async (email, name) => {
             </td>
           </tr>
         </table>
-       </td>
+      </td>
     </tr>
   </table>
 </body>

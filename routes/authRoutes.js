@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require("crypto");
 const Customer = require("../models/Customer");
 const User = require("../models/User");
+const Order = require("../models/Order"); // ✅ Import Order model for cascade delete
 const jwt = require("jsonwebtoken");
 const { protect, adminOnly } = require("../middleware/auth");
 const notificationService = require("../services/notificationService");
@@ -348,7 +349,6 @@ router.post("/customer/forgot-password", async (req, res) => {
     
     console.log("📧 Customer Password Reset URL:", resetUrl);
     
-    // ✅ Send email to customer
     await sendCustomerPasswordResetEmail(email, resetUrl, customer.name);
     
     res.status(200).json({
@@ -751,7 +751,7 @@ router.put("/customers/:id", protect, adminOnly, async (req, res) => {
   }
 });
 
-// ============ DELETE CUSTOMER ============
+// ============ DELETE CUSTOMER (UPDATED WITH CASCADE DELETE) ============
 router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id);
@@ -759,14 +759,47 @@ router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
     
+    console.log(`🗑️ Deleting customer: ${customer.email} (${customer.customerId})`);
+    
+    // ✅ Step 1: Delete all orders for this customer
+    const deletedOrders = await Order.deleteMany({ customerId: customer._id });
+    console.log(`✅ Deleted ${deletedOrders.deletedCount} orders for customer`);
+    
+    // ✅ Step 2: Delete the customer
     await customer.deleteOne();
     
     res.status(200).json({
       success: true,
-      message: "Customer deleted successfully"
+      message: "Customer and all associated orders deleted successfully",
+      shouldLogout: true,
+      deletedCustomerId: customer._id,
+      deletedCustomerEmail: customer.email,
+      deletedOrdersCount: deletedOrders.deletedCount
     });
   } catch (error) {
+    console.error("Delete customer error:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ CHECK IF USER EXISTS (For Auto Logout) ============
+router.post("/check-user-exists", async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.json({ exists: false });
+    }
+    
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+    
+    res.json({ 
+      exists: !!customer,
+      email: email 
+    });
+  } catch (error) {
+    console.error("Check user exists error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
