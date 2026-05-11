@@ -33,10 +33,11 @@ const additionalInfoSchema = new mongoose.Schema({
   payment: { type: String, default: "Secure Payment Options Available" }
 });
 
-// Reviews Schema
+// Reviews Schema - ENHANCED with distribution
 const reviewsSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
-  count: { type: Number, default: 0 }
+  count: { type: Number, default: 0 },
+  distribution: { type: Object, default: {} }
 });
 
 // ========== CLOUDINARY IMAGE SCHEMAS ==========
@@ -88,7 +89,7 @@ const productSchema = new mongoose.Schema({
   mainImage: { type: cloudinaryImageSchema, default: () => ({}) },
   
   // Product video
-productVideo: { type: cloudinaryVideoSchema, default: null },
+  productVideo: { type: cloudinaryVideoSchema, default: null },
 
   // Gallery images (multiple Cloudinary images)
   galleryImages: { type: [galleryImageSchema], default: [] },
@@ -114,7 +115,7 @@ productVideo: { type: cloudinaryVideoSchema, default: null },
   specifications: { type: specificationsSchema, default: () => ({}) },
   careInstructions: { type: careInstructionsSchema, default: () => ({}) },
   additionalInfo: { type: additionalInfoSchema, default: () => ({}) },
-  reviews: { type: reviewsSchema, default: () => ({}) }
+  reviews: { type: reviewsSchema, default: () => ({ rating: 0, count: 0, distribution: {} }) }
   
 }, { timestamps: true });
 
@@ -123,15 +124,12 @@ productVideo: { type: cloudinaryVideoSchema, default: null },
 // Get optimized main image URL (with transformations)
 productSchema.virtual('mainImageOptimized').get(function() {
   if (!this.mainImage || !this.mainImage.url) return null;
-  
-  // Add Cloudinary transformations for optimization
   return this.mainImage.url.replace('/upload/', '/upload/w_800,h_800,c_limit,q_auto,f_auto/');
 });
 
 // Get thumbnail optimized URL
 productSchema.virtual('thumbnailOptimized').get(function() {
   if (!this.thumbnail || !this.thumbnail.url) {
-    // If no thumbnail, use main image with thumbnail transformations
     if (this.mainImage && this.mainImage.url) {
       return this.mainImage.url.replace('/upload/', '/upload/w_200,h_200,c_fill,q_auto,f_auto/');
     }
@@ -152,6 +150,30 @@ productSchema.virtual('galleryOptimized').get(function() {
     alt: img.alt
   }));
 });
+
+// ========== IMPORTANT: UPDATE REVIEW STATS METHOD ==========
+// Add this method to your productSchema
+productSchema.methods.updateReviewStats = async function() {
+  const Review = mongoose.model('Review');
+  const stats = await Review.aggregate([
+    { $match: { productId: this._id, status: 'approved' } },
+    { $group: {
+      _id: null,
+      averageRating: { $avg: '$rating' },
+      totalReviews: { $sum: 1 }
+    }}
+  ]);
+  
+  if (stats[0]) {
+    this.reviews = {
+      rating: Math.round(stats[0].averageRating * 10) / 10,
+      count: stats[0].totalReviews
+    };
+  } else {
+    this.reviews = { rating: 0, count: 0 };
+  }
+  await this.save();
+};
 
 // Helper method to get image for different sizes
 productSchema.methods.getImageForSize = function(size = 'medium') {
@@ -174,6 +196,8 @@ productSchema.methods.getImageForSize = function(size = 'medium') {
 productSchema.index({ name: 'text', sku: 'text', brand: 'text' });
 productSchema.index({ category: 1 });
 productSchema.index({ status: 1 });
-productSchema.index({ 'mainImage.publicId': 1 });  // For faster Cloudinary queries
+productSchema.index({ 'mainImage.publicId': 1 });
+productSchema.index({ 'reviews.rating': -1 });
+productSchema.index({ 'reviews.count': -1 });
 
 module.exports = mongoose.model("Product", productSchema);

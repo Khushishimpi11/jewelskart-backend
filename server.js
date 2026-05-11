@@ -386,6 +386,7 @@ const returnRoutes = require("./routes/returnRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const contactRoutes = require("./routes/contactRoutes");
+const reviewRoutes = require('./routes/reviews');
 
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
@@ -395,6 +396,7 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/contact", contactRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // ============ TEST EMAIL ENDPOINT ============
 app.post("/api/test-email", async (req, res) => {

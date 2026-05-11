@@ -17,4 +17,4 @@ const getNextSequence = async (sequenceName) => {
   return counter.seq;
 };
 
-module.exports = { Counter, getNextSequence };
+module.exports = { Counter, getNextSequence };  
