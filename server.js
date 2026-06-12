@@ -352,7 +352,22 @@ console.log("✅ Cloudinary configured successfully");
 
 // CORS Configuration
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like native mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
+    
+    // In development mode, allow any localhost or 127.0.0.1 origin (with any port)
+    if (process.env.NODE_ENV === "development" || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    
+    const allowedOrigins = ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    
+    return callback(new Error('Not allowed by CORS'), false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
