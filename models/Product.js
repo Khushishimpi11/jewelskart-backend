@@ -79,24 +79,24 @@ const productSchema = new mongoose.Schema({
   brand: { type: String, default: 'JewelsKart Original' },
   stock: { type: Number, default: 0 },
   description: { type: String, default: '' },
-  
+
   // ========== EXISTING IMAGES FIELD (Keep for backward compatibility) ==========
   images: { type: [String], default: [] },
-  
+
   // ========== NEW CLOUDINARY FIELDS ==========
-  
+
   // Main product image (Cloudinary)
   mainImage: { type: cloudinaryImageSchema, default: () => ({}) },
-  
+
   // Product video
   productVideo: { type: cloudinaryVideoSchema, default: null },
 
   // Gallery images (multiple Cloudinary images)
   galleryImages: { type: [galleryImageSchema], default: [] },
-  
+
   // Thumbnail (auto-generated or custom)
   thumbnail: { type: cloudinaryImageSchema, default: () => ({}) },
-  
+
   // For future use - image optimization settings
   imageOptimization: {
     quality: { type: String, default: "auto" },
@@ -104,31 +104,31 @@ const productSchema = new mongoose.Schema({
     width: { type: Number, default: 800 },
     height: { type: Number, default: 800 }
   },
-  
+
   sku: { type: String, required: true, unique: true },
   tags: { type: [String], default: [] },
   status: { type: String, enum: ['Published', 'Draft', 'Archived'], default: 'Draft' },
   featured: { type: Boolean, default: false },
   bestSeller: { type: Boolean, default: false },
-  
+
   goldDetails: { type: goldDetailsSchema, default: () => ({}) },
   specifications: { type: specificationsSchema, default: () => ({}) },
   careInstructions: { type: careInstructionsSchema, default: () => ({}) },
   additionalInfo: { type: additionalInfoSchema, default: () => ({}) },
   reviews: { type: reviewsSchema, default: () => ({ rating: 0, count: 0, distribution: {} }) }
-  
+
 }, { timestamps: true });
 
 // ========== VIRTUAL FIELDS (For Cloudinary optimized URLs) ==========
 
 // Get optimized main image URL (with transformations)
-productSchema.virtual('mainImageOptimized').get(function() {
+productSchema.virtual('mainImageOptimized').get(function () {
   if (!this.mainImage || !this.mainImage.url) return null;
   return this.mainImage.url.replace('/upload/', '/upload/w_800,h_800,c_limit,q_auto,f_auto/');
 });
 
 // Get thumbnail optimized URL
-productSchema.virtual('thumbnailOptimized').get(function() {
+productSchema.virtual('thumbnailOptimized').get(function () {
   if (!this.thumbnail || !this.thumbnail.url) {
     if (this.mainImage && this.mainImage.url) {
       return this.mainImage.url.replace('/upload/', '/upload/w_200,h_200,c_fill,q_auto,f_auto/');
@@ -139,9 +139,9 @@ productSchema.virtual('thumbnailOptimized').get(function() {
 });
 
 // Get all gallery images with optimization
-productSchema.virtual('galleryOptimized').get(function() {
+productSchema.virtual('galleryOptimized').get(function () {
   if (!this.galleryImages || this.galleryImages.length === 0) return [];
-  
+
   return this.galleryImages.map(img => ({
     original: img.url,
     thumbnail: img.url.replace('/upload/', '/upload/w_100,h_100,c_fill,q_auto,f_auto/'),
@@ -153,17 +153,19 @@ productSchema.virtual('galleryOptimized').get(function() {
 
 // ========== IMPORTANT: UPDATE REVIEW STATS METHOD ==========
 // Add this method to your productSchema
-productSchema.methods.updateReviewStats = async function() {
+productSchema.methods.updateReviewStats = async function () {
   const Review = mongoose.model('Review');
   const stats = await Review.aggregate([
     { $match: { productId: this._id, status: 'approved' } },
-    { $group: {
-      _id: null,
-      averageRating: { $avg: '$rating' },
-      totalReviews: { $sum: 1 }
-    }}
+    {
+      $group: {
+        _id: null,
+        averageRating: { $avg: '$rating' },
+        totalReviews: { $sum: 1 }
+      }
+    }
   ]);
-  
+
   if (stats[0]) {
     this.reviews = {
       rating: Math.round(stats[0].averageRating * 10) / 10,
@@ -176,16 +178,16 @@ productSchema.methods.updateReviewStats = async function() {
 };
 
 // Helper method to get image for different sizes
-productSchema.methods.getImageForSize = function(size = 'medium') {
+productSchema.methods.getImageForSize = function (size = 'medium') {
   const sizes = {
     small: 'w_200,h_200,c_fill',
     medium: 'w_500,h_500,c_limit',
     large: 'w_1200,h_1200,c_limit',
     thumbnail: 'w_100,h_100,c_fill'
   };
-  
+
   const transformation = sizes[size] || sizes.medium;
-  
+
   if (this.mainImage && this.mainImage.url) {
     return this.mainImage.url.replace('/upload/', `/upload/${transformation},q_auto,f_auto/`);
   }
