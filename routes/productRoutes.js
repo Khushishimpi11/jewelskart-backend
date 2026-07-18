@@ -141,6 +141,27 @@ router.get("/next-sku/:category", async (req, res) => {
   }
 });
 
+// ============ TOTAL PRODUCT COUNT (Unfiltered) ============
+router.get("/count", async (req, res) => {
+  try {
+    const totalCount = await Product.countDocuments({});
+    const publishedCount = await Product.countDocuments({ status: "Published" });
+    const draftCount = await Product.countDocuments({ status: "Draft" });
+    const archivedCount = await Product.countDocuments({ status: "Archived" });
+
+    res.status(200).json({
+      success: true,
+      total: totalCount,
+      published: publishedCount,
+      draft: draftCount,
+      archived: archivedCount,
+    });
+  } catch (error) {
+    console.error("Error fetching product count:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ============ CREATE PRODUCT ============
 router.post("/add-with-images", upload.fields([
   { name: "mainImage", maxCount: 1 },

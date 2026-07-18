@@ -86,20 +86,9 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
   }
 });
 
-// Mark single notification as read
-router.put("/admin/notifications/:id/read", protect, adminOnly, async (req, res) => {
-  try {
-    const notification = await notificationService.markAsRead(req.params.id, req.user.id);
-    if (!notification) {
-      return res.status(404).json({ success: false, message: "Notification not found" });
-    }
-    res.json({ success: true, notification });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// ✅ STATIC ROUTES FIRST (before /:id wildcards to avoid conflicts)
 
-// Mark all as read
+// Mark all as read — must be before /:id/read
 router.put("/admin/notifications/read-all", protect, adminOnly, async (req, res) => {
   try {
     await notificationService.markAllAsRead(req.user.id);
@@ -109,17 +98,7 @@ router.put("/admin/notifications/read-all", protect, adminOnly, async (req, res)
   }
 });
 
-// Delete notification
-router.delete("/admin/notifications/:id", protect, adminOnly, async (req, res) => {
-  try {
-    await Notification.findOneAndDelete({ _id: req.params.id, adminId: req.user.id });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get notification stats
+// Get notification stats — must be before /:id
 router.get("/admin/notifications/stats", protect, adminOnly, async (req, res) => {
   try {
     const stats = {
@@ -145,7 +124,7 @@ router.get("/admin/notifications/stats", protect, adminOnly, async (req, res) =>
   }
 });
 
-// Get notifications by type
+// Get notifications by type — must be before /:id
 router.get("/admin/notifications/type/:type", protect, adminOnly, async (req, res) => {
   try {
     const { type } = req.params;
@@ -162,6 +141,32 @@ router.get("/admin/notifications/type/:type", protect, adminOnly, async (req, re
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// ✅ WILDCARD ROUTES LAST
+
+// Mark single notification as read
+router.put("/admin/notifications/:id/read", protect, adminOnly, async (req, res) => {
+  try {
+    const notification = await notificationService.markAsRead(req.params.id, req.user.id);
+    if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+    res.json({ success: true, notification });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Delete notification
+router.delete("/admin/notifications/:id", protect, adminOnly, async (req, res) => {
+  try {
+    await Notification.findOneAndDelete({ _id: req.params.id, adminId: req.user.id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 
 // ==================== SEND NOTIFICATION FROM FRONTEND (CMS) ====================
 // ✅ ADD THIS ROUTE - Ye route frontend se notification send karne ke liye hai

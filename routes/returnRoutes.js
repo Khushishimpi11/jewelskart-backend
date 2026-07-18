@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const ReturnRequest = require("../models/ReturnRequest");
 const Notification = require("../models/Notification");
+const notificationService = require("../services/notificationService");
 const Order = require("../models/Order");
 const Customer = require("../models/Customer");
 const Product = require("../models/Product");
@@ -123,6 +124,19 @@ if (exchangeDetails && requestType === 'exchange') {
       order.orderStatus = "Exchange Requested";
       order.exchangeRequestId = returnRequest._id;
       await order.save();
+    }
+    
+    // Notify Admins
+    try {
+      if (requestType === "cancel") {
+        await notificationService.sendOrderCancelled(order);
+      } else if (requestType === "return") {
+        await notificationService.sendReturnRequest(returnRequest, order);
+      } else if (requestType === "exchange") {
+        await notificationService.sendExchangeRequest(returnRequest, order);
+      }
+    } catch (adminNotifErr) {
+      console.error("Admin notification error:", adminNotifErr);
     }
     
     await Notification.create({
@@ -375,6 +389,13 @@ router.put("/admin/:id/refund-completed", protect, adminOnly, async (req, res) =
     order.orderStatus = "Return Refund Completed";
     await order.save();
     
+    // Notify Admins
+    try {
+      await notificationService.sendRefundCompleted(order, returnRequest.refundAmount);
+    } catch (adminNotifErr) {
+      console.error("Admin notification error:", adminNotifErr);
+    }
+
     await Notification.create({
       userId: returnRequest.customerId,
       userEmail: returnRequest.customerEmail,

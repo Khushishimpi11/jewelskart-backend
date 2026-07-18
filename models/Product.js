@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 // Gold Details Schema
 const goldDetailsSchema = new mongoose.Schema({
   weight: { type: Number, default: 0 },
-  purity: { type: String, enum: ['22K', '18K', '24K'], default: '22K' },
+  purity: { type: String, enum: ['9K', '10K', '14K', '18K', '21K', '22K', '23K', '24K'], default: '22K' },
   makingCharge: { type: Number, default: 0 }
 });
 

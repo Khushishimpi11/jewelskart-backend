@@ -14,12 +14,12 @@ class StockChecker {
   }
   
   setupOutOfStockChecker() {
-    // Runs every hour
-    cron.schedule("0 * * * *", async () => {
+    // Runs at 10:00 AM and 6:00 PM daily (2x per day)
+    cron.schedule("0 10,18 * * *", async () => {
       console.log("🔍 Running out of stock check...");
       await this.checkOutOfStockProducts();
     });
-    console.log("✅ Out of stock checker scheduled every hour");
+    console.log("✅ Out of stock checker scheduled for 10:00 AM and 6:00 PM (2x daily)");
   }
   
   async checkLowStockProducts() {

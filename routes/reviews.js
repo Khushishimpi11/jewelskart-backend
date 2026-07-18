@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Review = require('../models/Review');
 const Product = require('../models/Product');
+const notificationService = require('../services/notificationService');
 
 // ========== PUBLIC ROUTES ==========
 
@@ -49,6 +50,13 @@ router.post('/', async (req, res) => {
     await review.save();
     
     console.log('✅ Review saved successfully:', review._id);
+
+    // Notify admin of new review
+    try {
+      await notificationService.sendNewReview(product, review, { name, email });
+    } catch (notifErr) {
+      console.error('Review notification error:', notifErr);
+    }
     
     res.status(201).json({ 
       success: true, 

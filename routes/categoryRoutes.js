@@ -33,6 +33,43 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ✅ PUBLIC SYNC ROUTE
+router.get("/sync-counts", async (req, res) => {
+  try {
+    console.log("🔄 Syncing all category product counts...");
+    
+    const categories = await Category.find();
+    const results = [];
+    
+    for (const category of categories) {
+      const productCount = await Product.countDocuments({
+        category: { $regex: new RegExp(`^${category.name}$`, 'i') },
+        status: "Published"
+      });
+      
+      category.productCount = productCount;
+      await category.save();
+      
+      results.push({
+        id: category._id,
+        name: category.name,
+        productCount: productCount
+      });
+      
+      console.log(`📊 ${category.name}: ${productCount} products`);
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Updated product counts for ${categories.length} categories`,
+      results
+    });
+  } catch (error) {
+    console.error("Error syncing category counts:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // GET category tree
 router.get("/tree", async (req, res) => {
   try {
@@ -117,42 +154,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// ✅ PUBLIC SYNC ROUTE
-router.get("/sync-counts", async (req, res) => {
-  try {
-    console.log("🔄 Syncing all category product counts...");
-    
-    const categories = await Category.find();
-    const results = [];
-    
-    for (const category of categories) {
-      const productCount = await Product.countDocuments({
-        category: { $regex: new RegExp(`^${category.name}$`, 'i') },
-        status: "Published"
-      });
-      
-      category.productCount = productCount;
-      await category.save();
-      
-      results.push({
-        id: category._id,
-        name: category.name,
-        productCount: productCount
-      });
-      
-      console.log(`📊 ${category.name}: ${productCount} products`);
-    }
-    
-    res.status(200).json({
-      success: true,
-      message: `Updated product counts for ${categories.length} categories`,
-      results
-    });
-  } catch (error) {
-    console.error("Error syncing category counts:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 // ============ ADMIN ROUTES ============
 

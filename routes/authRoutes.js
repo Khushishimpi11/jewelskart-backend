@@ -7,9 +7,9 @@ const Order = require("../models/Order"); // ✅ Import Order model for cascade 
 const jwt = require("jsonwebtoken");
 const { protect, adminOnly } = require("../middleware/auth");
 const notificationService = require("../services/notificationService");
-const { 
-  sendAdminPasswordResetEmail, 
-  sendCustomerPasswordResetEmail 
+const {
+  sendAdminPasswordResetEmail,
+  sendCustomerPasswordResetEmail
 } = require("../services/emailService");
 
 const generateToken = (id, email, role, name, customerId) => {
@@ -30,31 +30,31 @@ const isValidPassword = (password) => {
 router.post("/google", async (req, res) => {
   try {
     const { credential } = req.body;
-    
+
     console.log("🔍 Google auth request received");
-    
+
     if (!credential) {
       return res.status(400).json({ success: false, message: "No token provided" });
     }
-    
+
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {
         Authorization: `Bearer ${credential}`
       }
     });
-    
+
     if (!userInfoResponse.ok) {
       throw new Error('Failed to get user info from Google');
     }
-    
+
     const userInfo = await userInfoResponse.json();
     const { email, name, picture, sub: googleId } = userInfo;
-    
+
     console.log("✅ Google user verified:", email);
-    
+
     let customer = await Customer.findOne({ email });
     let isNewCustomer = false;
-    
+
     if (customer) {
       if (!customer.googleId) {
         customer.googleId = googleId;
@@ -90,22 +90,22 @@ router.post("/google", async (req, res) => {
       isNewCustomer = true;
       console.log("✅ New customer created with Google");
     }
-    
+
     customer.lastLogin = new Date();
     await customer.save();
-    
+
     if (isNewCustomer) {
       await notificationService.sendNewCustomer(customer);
     }
-    
+
     const token = generateToken(
-      customer._id, 
-      customer.email, 
-      "customer", 
-      customer.name, 
+      customer._id,
+      customer.email,
+      "customer",
+      customer.name,
       customer.customerId
     );
-    
+
     res.status(200).json({
       success: true,
       message: "Google login successful",
@@ -134,34 +134,34 @@ router.post("/admin/google", async (req, res) => {
   try {
     const { accessToken, secretKey } = req.body;
     const ADMIN_SECRET = process.env.ADMIN_SECRET || "ADMIN_SECRET_2024";
-    
+
     console.log("🔍 Admin Google login request received");
-    
+
     if (secretKey !== ADMIN_SECRET) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Invalid admin secret key" 
+      return res.status(403).json({
+        success: false,
+        message: "Invalid admin secret key"
       });
     }
-    
+
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {
         Authorization: `Bearer ${accessToken}`
       }
     });
-    
+
     if (!userInfoResponse.ok) {
       throw new Error('Failed to get user info from Google');
     }
-    
+
     const userInfo = await userInfoResponse.json();
     const { email, name, picture, sub: googleId } = userInfo;
-    
+
     console.log("✅ Google user verified:", email);
-    
+
     let admin = await User.findOne({ email, role: "admin" });
     let isNewAdmin = false;
-    
+
     if (admin) {
       if (!admin.googleId) {
         admin.googleId = googleId;
@@ -184,16 +184,16 @@ router.post("/admin/google", async (req, res) => {
       isNewAdmin = true;
       console.log("✅ New admin created with Google");
     }
-    
+
     admin.lastLogin = new Date();
     await admin.save();
-    
+
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
       { expiresIn: "90d" }
     );
-    
+
     res.status(200).json({
       success: true,
       message: isNewAdmin ? "Admin registered successfully with Google" : "Admin login successful with Google",
@@ -217,47 +217,47 @@ router.post("/admin/google", async (req, res) => {
 router.post("/admin/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     console.log("🔍 Admin forgot password request for:", email);
-    
+
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
-    
+
     const admin = await User.findOne({ email, role: "admin" });
-    
+
     if (!admin) {
-      return res.status(200).json({ 
-        success: true, 
-        message: "If email exists, password reset link will be sent" 
+      return res.status(200).json({
+        success: true,
+        message: "If email exists, password reset link will be sent"
       });
     }
-    
+
     if (admin.isGoogleUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "This account uses Google Sign-In. Please login with Google." 
+      return res.status(400).json({
+        success: false,
+        message: "This account uses Google Sign-In. Please login with Google."
       });
     }
-    
+
     const resetToken = crypto.randomBytes(32).toString("hex");
-    
+
     admin.resetPasswordToken = resetToken;
     admin.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await admin.save();
-    
+
     const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:8080"}/reset-password?token=${resetToken}&email=${email}`;
-    
+
     console.log("📧 Admin Password Reset URL:", resetUrl);
-    
+
     await sendAdminPasswordResetEmail(email, resetUrl, admin.name);
-    
+
     res.status(200).json({
       success: true,
       message: "Password reset link has been sent to your email",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
-    
+
   } catch (error) {
     console.error("Admin forgot password error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -268,44 +268,44 @@ router.post("/admin/forgot-password", async (req, res) => {
 router.post("/admin/reset-password", async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
-    
+
     console.log("🔍 Admin reset password request for:", email);
-    
+
     if (!email || !token || !newPassword) {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
-    
+
     if (!isValidPassword(newPassword)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Password must be at least 8 characters with at least 1 number and 1 special character (!@#$%^&*)" 
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters with at least 1 number and 1 special character (!@#$%^&*)"
       });
     }
-    
+
     const admin = await User.findOne({
       email,
       role: "admin",
       resetPasswordToken: token,
       resetPasswordExpires: { $gt: Date.now() }
     });
-    
+
     if (!admin) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid or expired reset token" 
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token"
       });
     }
-    
+
     admin.password = newPassword;
     admin.resetPasswordToken = undefined;
     admin.resetPasswordExpires = undefined;
     await admin.save();
-    
+
     res.status(200).json({
       success: true,
       message: "Password reset successfully. Please login with new password."
     });
-    
+
   } catch (error) {
     console.error("Admin reset password error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -316,47 +316,47 @@ router.post("/admin/reset-password", async (req, res) => {
 router.post("/customer/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     console.log("🔍 Customer forgot password request for:", email);
-    
+
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
-    
+
     const customer = await Customer.findOne({ email });
-    
+
     if (!customer) {
-      return res.status(200).json({ 
-        success: true, 
-        message: "If email exists, password reset link will be sent" 
+      return res.status(200).json({
+        success: true,
+        message: "If email exists, password reset link will be sent"
       });
     }
-    
+
     if (customer.isGoogleUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "This account uses Google Sign-In. Please login with Google." 
+      return res.status(400).json({
+        success: false,
+        message: "This account uses Google Sign-In. Please login with Google."
       });
     }
-    
+
     const resetToken = crypto.randomBytes(32).toString("hex");
-    
+
     customer.resetPasswordToken = resetToken;
     customer.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await customer.save();
-    
+
     const resetUrl = `${process.env.WEBSITE_URL || "http://localhost:8081"}/reset-password?token=${resetToken}&email=${email}`;
-    
+
     console.log("📧 Customer Password Reset URL:", resetUrl);
-    
+
     await sendCustomerPasswordResetEmail(email, resetUrl, customer.name);
-    
+
     res.status(200).json({
       success: true,
       message: "Password reset link sent to your email",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
-    
+
   } catch (error) {
     console.error("Customer forgot password error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -367,42 +367,42 @@ router.post("/customer/forgot-password", async (req, res) => {
 router.post("/customer/reset-password", async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
-    
+
     console.log("🔍 Customer reset password request for:", email);
-    
+
     if (!email || !token || !newPassword) {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
-    
+
     if (newPassword.length < 6) {
       return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
     }
-    
+
     const customer = await Customer.findOne({
       email,
       resetPasswordToken: token,
       resetPasswordExpires: { $gt: Date.now() }
     });
-    
+
     if (!customer) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid or expired reset token" 
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token"
       });
     }
-    
+
     customer.password = newPassword;
     customer.resetPasswordToken = undefined;
     customer.resetPasswordExpires = undefined;
     await customer.save();
-    
+
     console.log("✅ Customer password reset successful for:", email);
-    
+
     res.status(200).json({
       success: true,
       message: "Password reset successfully. Please login with your new password."
     });
-    
+
   } catch (error) {
     console.error("Customer reset password error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -417,8 +417,8 @@ router.get("/verify", protect, async (req, res) => {
       if (!customer) {
         return res.status(404).json({ success: false, message: "Customer not found" });
       }
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         user: {
           id: customer._id,
           customerId: customer.customerId,
@@ -449,12 +449,12 @@ router.get("/verify", protect, async (req, res) => {
 router.post("/customer/register", async (req, res) => {
   try {
     const { name, email, password, phone, address } = req.body;
-    
+
     const existingCustomer = await Customer.findOne({ email });
     if (existingCustomer) {
       return res.status(400).json({ success: false, message: "Email already registered" });
     }
-    
+
     const customer = await Customer.create({
       name,
       email,
@@ -475,11 +475,11 @@ router.post("/customer/register", async (req, res) => {
         upiId: ""
       }
     });
-    
+
     const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId);
-    
+
     await notificationService.sendNewCustomer(customer);
-    
+
     res.status(201).json({
       success: true,
       message: "Customer registered successfully",
@@ -506,33 +506,33 @@ router.post("/customer/register", async (req, res) => {
 router.post("/customer/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     const customer = await Customer.findOne({ email });
     if (!customer) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
-    
+
     if (customer.isGoogleUser && !customer.password) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "This account uses Google Sign-In. Please login with Google." 
+      return res.status(401).json({
+        success: false,
+        message: "This account uses Google Sign-In. Please login with Google."
       });
     }
-    
+
     const isMatch = await customer.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
-    
+
     if (!customer.isActive) {
       return res.status(401).json({ success: false, message: "Account is disabled" });
     }
-    
+
     customer.lastLogin = new Date();
     await customer.save();
-    
+
     const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId);
-    
+
     res.status(200).json({
       success: true,
       message: "Customer login successful",
@@ -560,19 +560,19 @@ router.put("/update-profile", protect, async (req, res) => {
   try {
     const { firstName, lastName, phone } = req.body;
     const customer = await Customer.findById(req.user.id);
-    
+
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     const fullName = `${firstName} ${lastName}`.trim();
     if (fullName) customer.name = fullName;
     if (phone) customer.phone = phone;
-    
+
     await customer.save();
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: "Profile updated successfully",
       user: {
         id: customer._id,
@@ -597,11 +597,11 @@ router.put("/update-address", protect, async (req, res) => {
   try {
     const { street, city, state, pincode, country } = req.body;
     const customer = await Customer.findById(req.user.id);
-    
+
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     customer.address = {
       street: street || "",
       city: city || "",
@@ -609,11 +609,11 @@ router.put("/update-address", protect, async (req, res) => {
       pincode: pincode || "",
       country: country || "India"
     };
-    
+
     await customer.save();
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: "Address updated successfully",
       address: customer.address
     });
@@ -628,11 +628,11 @@ router.put("/update-bank-details", protect, async (req, res) => {
   try {
     const { accountHolderName, accountNumber, bankName, ifscCode, upiId } = req.body;
     const customer = await Customer.findById(req.user.id);
-    
+
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     customer.bankDetails = {
       accountHolderName: accountHolderName || "",
       accountNumber: accountNumber || "",
@@ -640,11 +640,11 @@ router.put("/update-bank-details", protect, async (req, res) => {
       ifscCode: ifscCode || "",
       upiId: upiId || ""
     };
-    
+
     await customer.save();
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: "Bank details updated successfully",
       bankDetails: customer.bankDetails
     });
@@ -658,7 +658,7 @@ router.put("/update-bank-details", protect, async (req, res) => {
 router.get("/customers", protect, adminOnly, async (req, res) => {
   try {
     const customers = await Customer.find().sort({ createdAt: -1 });
-    
+
     res.status(200).json({
       success: true,
       count: customers.length,
@@ -690,7 +690,7 @@ router.get("/customers/:id", protect, adminOnly, async (req, res) => {
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     res.status(200).json({
       success: true,
       customer: {
@@ -717,20 +717,20 @@ router.get("/customers/:id", protect, adminOnly, async (req, res) => {
 router.put("/customers/:id", protect, adminOnly, async (req, res) => {
   try {
     const { name, phone, address, isActive, bankDetails } = req.body;
-    
+
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     if (name) customer.name = name;
     if (phone) customer.phone = phone;
     if (address) customer.address = address;
     if (isActive !== undefined) customer.isActive = isActive;
     if (bankDetails) customer.bankDetails = bankDetails;
-    
+
     await customer.save();
-    
+
     res.status(200).json({
       success: true,
       message: "Customer updated successfully",
@@ -758,16 +758,16 @@ router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-    
+
     console.log(`🗑️ Deleting customer: ${customer.email} (${customer.customerId})`);
-    
+
     // ✅ Step 1: Delete all orders for this customer
     const deletedOrders = await Order.deleteMany({ customerId: customer._id });
     console.log(`✅ Deleted ${deletedOrders.deletedCount} orders for customer`);
-    
+
     // ✅ Step 2: Delete the customer
     await customer.deleteOne();
-    
+
     res.status(200).json({
       success: true,
       message: "Customer and all associated orders deleted successfully",
@@ -786,16 +786,16 @@ router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
 router.post("/check-user-exists", async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       return res.json({ exists: false });
     }
-    
+
     const customer = await Customer.findOne({ email: email.toLowerCase() });
-    
-    res.json({ 
+
+    res.json({
       exists: !!customer,
-      email: email 
+      email: email
     });
   } catch (error) {
     console.error("Check user exists error:", error);
@@ -808,44 +808,44 @@ router.post("/admin/register", async (req, res) => {
   try {
     const { name, email, password, secretKey } = req.body;
     const ADMIN_SECRET = process.env.ADMIN_SECRET || "ADMIN_SECRET_2024";
-    
+
     if (secretKey !== ADMIN_SECRET) {
       return res.status(403).json({ success: false, message: "Invalid secret key" });
     }
-    
+
     const existingAdmin = await User.findOne({ email });
     if (existingAdmin) {
       return res.status(400).json({ success: false, message: "Admin already exists" });
     }
-    
+
     if (!isValidPassword(password)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Password must be at least 8 characters with at least 1 number and 1 special character (!@#$%^&*)" 
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters with at least 1 number and 1 special character (!@#$%^&*)"
       });
     }
-    
-    const admin = await User.create({ 
-      name, 
-      email, 
-      password, 
+
+    const admin = await User.create({
+      name,
+      email,
+      password,
       role: "admin",
       isGoogleUser: false
     });
-    
+
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
       { expiresIn: "90d" }
     );
-    
+
     res.status(201).json({
       success: true,
       token,
-      user: { 
-        id: admin._id, 
-        name: admin.name, 
-        email: admin.email, 
+      user: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
         role: "admin",
         isGoogleUser: false
       }
@@ -861,39 +861,39 @@ router.post("/admin/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     const admin = await User.findOne({ email, role: "admin" });
-    
+
     if (!admin) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
-    
+
     if (admin.isGoogleUser && !admin.password) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "This account uses Google Sign-In. Please login with Google." 
+      return res.status(401).json({
+        success: false,
+        message: "This account uses Google Sign-In. Please login with Google."
       });
     }
-    
+
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
-    
+
     admin.lastLogin = new Date();
     await admin.save();
-    
+
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: "admin", name: admin.name },
       process.env.JWT_SECRET || "jewelskart_secret_key_2024",
       { expiresIn: "90d" }
     );
-    
+
     res.status(200).json({
       success: true,
       token,
-      user: { 
-        id: admin._id, 
-        name: admin.name, 
-        email: admin.email, 
+      user: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
         role: "admin",
         isGoogleUser: admin.isGoogleUser,
         profilePicture: admin.profilePicture
@@ -901,6 +901,55 @@ router.post("/admin/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Admin login error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ ADMIN UPDATE PROFILE ============
+router.put("/admin/update-profile", protect, adminOnly, async (req, res) => {
+  try {
+    const { name, currentPassword, newPassword } = req.body;
+    const admin = await User.findById(req.user.id);
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    if (name) admin.name = name;
+
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, message: "Current password is required to change password" });
+      }
+      const isMatch = await admin.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: "Current password is incorrect" });
+      }
+      if (!isValidPassword(newPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: "New password must be at least 8 characters with at least 1 number and 1 special character (!@#$%&*)"
+        });
+      }
+      admin.password = newPassword;
+    }
+
+    await admin.save();
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        isGoogleUser: admin.isGoogleUser,
+        profilePicture: admin.profilePicture
+      }
+    });
+  } catch (error) {
+    console.error("Admin update profile error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -913,8 +962,8 @@ router.get("/me", protect, async (req, res) => {
       if (!customer) {
         return res.status(404).json({ success: false, message: "Customer not found" });
       }
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         user: {
           id: customer._id,
           customerId: customer.customerId,

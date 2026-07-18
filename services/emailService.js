@@ -19,7 +19,7 @@ const brandColor = "#612030";
 // ============ ORDER CONFIRMATION EMAIL TEMPLATE ============
 const getOrderConfirmationEmailHTML = (orderData) => {
   const { orderNumber, customerName, items, totalAmount, shippingAddress, paymentMethod, orderDate, trackingLink } = orderData;
-  
+
   const itemsHTML = items.map(item => `
     <tr style="border-bottom: 1px solid #e0e0e0;">
       <td style="padding: 15px 10px; width: 80px;">
@@ -274,17 +274,17 @@ const sendOrderConfirmationEmail = async (orderData) => {
   console.log("📧 ===== SENDING ORDER CONFIRMATION EMAIL =====");
   console.log("📧 Order Number:", orderData.orderNumber);
   console.log("📧 Customer Email:", orderData.customerEmail);
-  
+
   try {
     const { orderNumber, customerEmail, customerName, items, totalAmount, shippingAddress, paymentMethod, createdAt } = orderData;
-    
+
     // ✅ FIXED: Use orderNumber as trackingId (not undefined variable)
     const trackingId = orderNumber;  // 👈 THIS WAS MISSING!
     const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;
-    
+
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
-    
+
     const emailData = {
       orderNumber,
       customerName: customerName || 'Customer',
@@ -308,10 +308,10 @@ const sendOrderConfirmationEmail = async (orderData) => {
       trackingLink,
       estimatedDelivery: estimatedDelivery.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
     };
-    
+
     const htmlContent = getOrderConfirmationEmailHTML(emailData);
     const textContent = `Order Confirmation - JewelsKart\n\nOrder #${orderNumber}\nTotal: ₹${totalAmount.toLocaleString('en-IN')}\nTrack your order: ${trackingLink}`;
-    
+
     const info = await transporter.sendMail({
       from: `"JewelsKart" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: customerEmail,
@@ -319,12 +319,12 @@ const sendOrderConfirmationEmail = async (orderData) => {
       text: textContent,
       html: htmlContent,
     });
-    
+
     console.log(`✅ Email SENT Successfully!`);
     console.log(`✅ Message ID: ${info.messageId}`);
     console.log(`✅ To: ${customerEmail}`);
     return true;
-    
+
   } catch (error) {
     console.error("❌ EMAIL SEND FAILED:");
     console.error("❌ Error:", error.message);
@@ -487,7 +487,7 @@ const sendAdminPasswordResetEmail = async (email, resetUrl, name) => {
   try {
     const htmlContent = getAdminPasswordResetEmailHTML(name, resetUrl);
     const textContent = `Reset your password: ${resetUrl}`;
-    
+
     await transporter.sendMail({
       from: `"JewelsKart Admin" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -508,7 +508,7 @@ const sendCustomerPasswordResetEmail = async (email, resetUrl, name) => {
   try {
     const htmlContent = getCustomerPasswordResetEmailHTML(name, resetUrl);
     const textContent = `Reset your password: ${resetUrl}`;
-    
+
     await transporter.sendMail({
       from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -529,7 +529,7 @@ const sendCustomerWelcomeEmail = async (email, name) => {
   try {
     const htmlContent = getCustomerWelcomeEmailHTML(name);
     const textContent = `Welcome to JewelsKart! Start shopping: ${process.env.WEBSITE_URL || "http://localhost:8081"}/shop`;
-    
+
     await transporter.sendMail({
       from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
       to: email,

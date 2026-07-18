@@ -13,22 +13,27 @@ const notificationSchema = new mongoose.Schema({
     default: "customer"
   },
   
-  // Notification Details - 13 Types
+  // Notification Details - Full Type Set
   type: { 
     type: String, 
     enum: [
       // Customer types
       "order", "return", "refund", "exchange", "complaint",
-      // Admin types - Product Related
+      // Admin - Inventory
       "out_of_stock", "low_stock", "back_in_stock",
-      // Admin types - Order Related
-      "new_order", "order_cancelled", "payment_received", "payment_failed",
-      // Admin types - Return/Exchange Related
+      // Admin - Orders
+      "new_order", "order_cancelled", "order_shipped", "order_delivered",
+      // Admin - Payments
+      "payment_received", "payment_failed", "refund_processed",
+      // Admin - Returns/Exchange
       "return_request", "exchange_request", "return_exchange_approved", "return_exchange_rejected",
-      // Admin types - Customer Related
+      "refund_completed",
+      // Admin - Customer
       "new_customer", "customer_complaint",
+      // Admin - Reviews
+      "new_review",
       // System
-      "system"
+      "system", "system_error", "db_backup", "cms_update"
     ],
     required: true
   },
@@ -56,6 +61,7 @@ const notificationSchema = new mongoose.Schema({
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
     returnId: { type: mongoose.Schema.Types.ObjectId, ref: "ReturnRequest" },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+    reviewId: { type: mongoose.Schema.Types.ObjectId },
     complaintId: { type: mongoose.Schema.Types.ObjectId },
     oldQuantity: { type: Number },
     newQuantity: { type: Number },

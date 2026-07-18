@@ -2,20 +2,20 @@ const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema({
   orderNumber: { type: String, unique: true },
-  
-  customerId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "Customer", 
+
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Customer",
     required: true,
     index: true
   },
-  
+
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
-  
+
   customerName: { type: String, required: true },
   customerEmail: { type: String, required: true, index: true },
   customerPhone: { type: String, required: true },
-  
+
   shippingAddress: {
     street: { type: String, required: true },
     city: { type: String, required: true },
@@ -23,7 +23,7 @@ const orderSchema = new mongoose.Schema({
     pincode: { type: String, required: true },
     country: { type: String, default: "India" }
   },
-  
+
   items: [{
     productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
     productName: { type: String, required: true },
@@ -34,67 +34,67 @@ const orderSchema = new mongoose.Schema({
     total: { type: Number, required: true },
     size: { type: String, default: "" }  // ✅ ADDED: For ring size
   }],
-  
+
   subtotal: { type: Number, required: true },
   discount: { type: Number, default: 0 },
   shippingCharge: { type: Number, default: 0 },
   tax: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
-  
+
   // ✅ Payment Method - COD and ONLINE both supported
-  paymentMethod: { 
-    type: String, 
-    enum: ["COD", "Card", "UPI", "NetBanking", "ONLINE", "online"], 
-    default: "COD" 
+  paymentMethod: {
+    type: String,
+    enum: ["COD", "Card", "UPI", "NetBanking", "ONLINE", "online"],
+    default: "COD"
   },
-  
+
   // ✅ Payment Status - Both "Pending" and "PENDING" supported
-  paymentStatus: { 
-    type: String, 
-    enum: ["Pending", "PENDING", "Paid", "PAID", "Failed", "FAILED", "Refunded", "REFUNDED", "SUCCESS"], 
-    default: "Pending" 
+  paymentStatus: {
+    type: String,
+    enum: ["Pending", "PENDING", "Paid", "PAID", "Failed", "FAILED", "Refunded", "REFUNDED", "SUCCESS"],
+    default: "Pending"
   },
-  
+
   // ✅ Order Status - Complete list with "Pending Payment"
-  orderStatus: { 
-    type: String, 
+  orderStatus: {
+    type: String,
     enum: [
       // Normal order statuses
       "Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered", "Cancelled",
       "Pending Payment", "Pending",
-      
+
       // Return statuses
-      "Return Requested", "Return Under Review", "Return Approved", 
+      "Return Requested", "Return Under Review", "Return Approved",
       "Return Pickup Scheduled", "Return Picked Up", "Return Quality Check",
       "Return Refund Initiated", "Return Refund Completed",
-      
+
       // Exchange statuses
       "Exchange Requested", "Exchange Under Review", "Exchange Approved",
       "Exchange Pickup Scheduled", "Exchange Picked Up", "Exchange Quality Check",
       "Exchange Replacement Processing", "Exchange Shipped", "Exchange Delivered"
-    ], 
-    default: "Confirmed" 
+    ],
+    default: "Confirmed"
   },
-  
+
   statusHistory: [{
     status: String,
     date: { type: Date, default: Date.now },
     note: String,
     updatedBy: { type: String, default: "system" }
   }],
-  
+
   notes: { type: String, default: "" },
   trackingNumber: { type: String, default: "" },
   courierPartner: { type: String, default: "" },
   awbNumber: { type: String, default: "" },
-  
+
   // Payment tracking fields for Razorpay
   paymentId: { type: String, default: "" },
   razorpayOrderId: { type: String, default: "" },
   paymentDate: { type: Date },
   refundId: { type: String, default: "" },
   refundAmount: { type: Number, default: 0 },
-  
+
   // Request tracking fields
   cancellationReason: { type: String, default: "" },
   cancelledAt: { type: Date },
@@ -104,13 +104,13 @@ const orderSchema = new mongoose.Schema({
   exchangeTrackingNumber: { type: String, default: "" },
   returnPickupScheduled: { type: Date },
   exchangeShippedDate: { type: Date },
-  
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
 // Auto-generate order number
-orderSchema.pre("save", async function(next) {
+orderSchema.pre("save", async function (next) {
   if (!this.orderNumber) {
     const date = new Date();
     const year = date.getFullYear();

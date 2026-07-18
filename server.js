@@ -41,7 +41,7 @@ const brandColor = "#612030";
 // ============ ORDER CONFIRMATION EMAIL TEMPLATE ============
 const getOrderConfirmationEmailHTML = (orderData) => {
   const { orderNumber, customerName, items, totalAmount, shippingAddress, paymentMethod, orderDate, trackingLink } = orderData;
-  
+
   const itemsHTML = items.map(item => `
     <tr style="border-bottom: 1px solid #e0e0e0;">
       <td style="padding: 15px 10px; width: 80px;">
@@ -284,16 +284,16 @@ const sendOrderConfirmationEmail = async (orderData) => {
   console.log("📧 ===== SENDING ORDER CONFIRMATION EMAIL =====");
   console.log("📧 Order Number:", orderData.orderNumber);
   console.log("📧 Customer Email:", orderData.customerEmail);
-  
+
   try {
     const { orderNumber, customerEmail, customerName, items, totalAmount, shippingAddress, paymentMethod, createdAt } = orderData;
-    
+
     // ✅ FIXED: trackingId defined
     const trackingId = orderNumber;
-  const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;    
+    const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
-    
+
     const emailData = {
       orderNumber,
       customerName: customerName || 'Customer',
@@ -317,10 +317,10 @@ const sendOrderConfirmationEmail = async (orderData) => {
       trackingLink,
       estimatedDelivery: estimatedDelivery.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
     };
-    
+
     const htmlContent = getOrderConfirmationEmailHTML(emailData);
     const textContent = `Order Confirmation - JewelsKart\n\nOrder #${orderNumber}\nTotal: ₹${totalAmount.toLocaleString('en-IN')}\nTrack your order: ${trackingLink}`;
-    
+
     const info = await transporter.sendMail({
       from: `"JewelsKart" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: customerEmail,
@@ -328,12 +328,12 @@ const sendOrderConfirmationEmail = async (orderData) => {
       text: textContent,
       html: htmlContent,
     });
-    
+
     console.log(`✅ Email SENT Successfully!`);
     console.log(`✅ Message ID: ${info.messageId}`);
     console.log(`✅ To: ${customerEmail}`);
     return true;
-    
+
   } catch (error) {
     console.error("❌ EMAIL SEND FAILED:");
     console.error("❌ Error:", error.message);
@@ -355,17 +355,17 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like native mobile apps, curl, postman)
     if (!origin) return callback(null, true);
-    
+
     // In development mode, allow any localhost or 127.0.0.1 origin (with any port)
     if (process.env.NODE_ENV === "development" || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    
+
     const allowedOrigins = ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-    
+
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
@@ -402,6 +402,7 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const reviewRoutes = require('./routes/reviews');
+const settingRoutes = require("./routes/settingRoutes");
 
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
@@ -412,15 +413,16 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/contact", contactRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use("/api/settings", settingRoutes);
 
 // ============ TEST EMAIL ENDPOINT ============
 app.post("/api/test-email", async (req, res) => {
   console.log("🧪 Testing email endpoint...");
-  
+
   try {
     await transporter.verify();
     console.log("✅ SMTP connection verified");
-    
+
     const testResult = await transporter.sendMail({
       from: `"JewelsKart Test" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: req.body.email || "test@example.com",
@@ -428,16 +430,16 @@ app.post("/api/test-email", async (req, res) => {
       text: "If you receive this, your email is working!",
       html: "<h2>✅ Email Working!</h2><p>Your nodemailer configuration is correct.</p>"
     });
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: "Test email sent successfully",
       messageId: testResult.messageId
     });
   } catch (error) {
     console.error("❌ Test email failed:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: error.message,
       code: error.code
     });

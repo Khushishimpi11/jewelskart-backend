@@ -7,11 +7,12 @@ const Customer = require("../models/Customer");
 const { protect, adminOnly, customerOnly } = require("../middleware/auth");
 const Razorpay = require("razorpay");
 const { sendOrderConfirmationEmail } = require("../services/emailService");
+const notificationService = require("../services/notificationService");
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
 // Helper: Map order status to tracking status
@@ -45,23 +46,23 @@ router.post("/create", protect, customerOnly, async (req, res) => {
 
     for (const item of items) {
       const product = await Product.findById(item.productId);
-      
+
       if (!product) {
         return res.status(404).json({ success: false, message: `Product not found` });
       }
-      
+
       if (product.stock < item.quantity) {
         return res.status(400).json({
           success: false,
           message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
         });
       }
-      
+
       const itemTotal = product.price * item.quantity;
       subtotal += itemTotal;
-      
+
       const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
-      
+
       orderItems.push({
         productId: product._id,
         productName: product.name,
@@ -72,21 +73,21 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         total: itemTotal,
         size: item.size || item.selectedSize || ""
       });
-      
+
       console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}`);
-      
+
       product.stock -= item.quantity;
       await product.save();
     }
-    
+
     const shippingCharge = subtotal > 5000 ? 0 : 100;
     const tax = Math.round(subtotal * 0.05);
     const totalAmount = subtotal + shippingCharge + tax;
-    
+
     const user = req.user;
-    
+
     let customer = await Customer.findOne({ email: user.email });
-    
+
     if (!customer) {
       customer = await Customer.create({
         name: user.name,
@@ -106,7 +107,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       });
       console.log(`✅ New customer created: ${customer.name} (${customer._id})`);
     }
-    
+
     // Create order with pending payment status
     const order = await Order.create({
       userId: user.id,
@@ -131,10 +132,10 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         date: new Date()
       }]
     });
-    
+
     console.log(`✅ Order created: ${order.orderNumber} with customerId: ${order.customerId}`);
     console.log(`📦 Order items with sizes:`, order.items.map(i => ({ name: i.productName, size: i.size })));
-    
+
     const trackingId = `TRK${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const tracking = await Tracking.create({
       trackingId: trackingId,
@@ -149,13 +150,13 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         date: new Date()
       }]
     });
-    
+
     order.trackingNumber = tracking.trackingId;
     await order.save();
-    
+
     const allOrders = await Order.find({ customerEmail: customer.email });
     const totalSpent = allOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-    
+
     await Customer.findByIdAndUpdate(customer._id, {
       $set: {
         orderCount: allOrders.length,
@@ -167,7 +168,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         "address.pincode": shippingAddress?.pincode || customer.address?.pincode
       }
     });
-    
+
     // ============ SEND ORDER CONFIRMATION EMAIL ============
     if (paymentMethod === "COD") {
       try {
@@ -179,7 +180,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
           productImage: item.productImage || "",
           productSku: item.productSku
         }));
-        
+
         await sendOrderConfirmationEmail({
           orderNumber: order.orderNumber,
           customerEmail: customer.email,
@@ -193,14 +194,21 @@ router.post("/create", protect, customerOnly, async (req, res) => {
           shippingAddress: shippingAddress,
           paymentMethod: paymentMethod,
           createdAt: order.createdAt,
-          trackingId: tracking.trackingId 
+          trackingId: tracking.trackingId
         });
         console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
       } catch (emailError) {
         console.error("❌ Email sending failed:", emailError.message);
       }
+
+      // Notify Admins of new COD order
+      try {
+        await notificationService.sendNewOrder(order);
+      } catch (notifErr) {
+        console.error("Order creation notify error:", notifErr);
+      }
     }
-    
+
     // If payment method is online, create Razorpay order
     let razorpayOrder = null;
     if (paymentMethod !== "COD") {
@@ -215,13 +223,13 @@ router.post("/create", protect, customerOnly, async (req, res) => {
           customerEmail: customer.email
         }
       });
-      
+
       order.razorpayOrderId = razorpayOrder.id;
       await order.save();
-      
+
       console.log(`✅ Razorpay order created: ${razorpayOrder.id} for order ${order.orderNumber}`);
     }
-    
+
     res.status(201).json({
       success: true,
       message: paymentMethod === "COD" ? "Order confirmed successfully" : "Order created. Please complete payment.",
@@ -234,7 +242,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         key_id: process.env.RAZORPAY_KEY_ID
       } : null
     });
-    
+
   } catch (error) {
     console.error("Order creation error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -245,23 +253,28 @@ router.post("/create", protect, customerOnly, async (req, res) => {
 router.post("/update-payment-status", protect, async (req, res) => {
   try {
     const { orderId, paymentId, razorpayOrderId, signature } = req.body;
-    
+
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
-    
+
     const crypto = require('crypto');
     const body = razorpayOrderId + "|" + paymentId;
     const expectedSignature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(body.toString())
       .digest('hex');
-    
+
     if (expectedSignature !== signature) {
+      try {
+        await notificationService.sendPaymentFailed(order);
+      } catch (notifErr) {
+        console.error("Payment failed notify error:", notifErr);
+      }
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
-    
+
     order.paymentStatus = "SUCCESS";
     order.paymentId = paymentId;
     order.razorpayOrderId = razorpayOrderId;
@@ -273,9 +286,9 @@ router.post("/update-payment-status", protect, async (req, res) => {
       updatedBy: order.customerName,
       date: new Date()
     });
-    
+
     await order.save();
-    
+
     const tracking = await Tracking.findOne({ orderId: order._id });
     if (tracking) {
       tracking.status = "CONFIRMED";
@@ -288,11 +301,11 @@ router.post("/update-payment-status", protect, async (req, res) => {
       });
       await tracking.save();
     }
-    
+
     // Send order confirmation email for online payment
     try {
       const customer = await Customer.findById(order.customerId);
-      
+
       const emailItems = order.items.map(item => ({
         productName: item.productName,
         quantity: item.quantity,
@@ -301,7 +314,7 @@ router.post("/update-payment-status", protect, async (req, res) => {
         productImage: item.productImage || "",
         productSku: item.productSku
       }));
-      
+
       await sendOrderConfirmationEmail({
         orderNumber: order.orderNumber,
         customerEmail: order.customerEmail,
@@ -320,15 +333,23 @@ router.post("/update-payment-status", protect, async (req, res) => {
     } catch (emailError) {
       console.error("❌ Email sending failed:", emailError.message);
     }
-    
+
+    // Notify Admins of payment success & new order
+    try {
+      await notificationService.sendNewOrder(order);
+      await notificationService.sendPaymentReceived(order);
+    } catch (notifErr) {
+      console.error("Order payment confirmation notify error:", notifErr);
+    }
+
     console.log(`✅ Payment successful for order ${order.orderNumber}. Payment ID: ${paymentId}`);
-    
+
     res.json({
       success: true,
       message: "Payment verified and order confirmed",
       order: order
     });
-    
+
   } catch (error) {
     console.error("Payment update error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -339,26 +360,26 @@ router.post("/update-payment-status", protect, async (req, res) => {
 router.put("/admin/:id/status", protect, adminOnly, async (req, res) => {
   try {
     const { status, note } = req.body;
-    
+
     const validStatuses = [
       "Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered", "Cancelled",
-      "Return Requested", "Return Under Review", "Return Approved", 
+      "Return Requested", "Return Under Review", "Return Approved",
       "Return Pickup Scheduled", "Return Picked Up", "Return Quality Check",
       "Return Refund Initiated", "Return Refund Completed",
       "Exchange Requested", "Exchange Under Review", "Exchange Approved",
       "Exchange Pickup Scheduled", "Exchange Picked Up", "Exchange Quality Check",
       "Exchange Replacement Processing", "Exchange Shipped", "Exchange Delivered"
     ];
-    
+
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: "Invalid status" });
     }
-    
+
     const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
-    
+
     order.orderStatus = status;
     order.statusHistory.push({
       status,
@@ -366,11 +387,11 @@ router.put("/admin/:id/status", protect, adminOnly, async (req, res) => {
       updatedBy: req.user.name,
       date: new Date()
     });
-    
+
     await order.save();
-    
+
     let tracking = await Tracking.findOne({ orderId: order._id });
-    
+
     if (!tracking) {
       const trackingId = `TRK${Date.now()}${Math.floor(Math.random() * 1000)}`;
       tracking = await Tracking.create({
@@ -399,16 +420,29 @@ router.put("/admin/:id/status", protect, adminOnly, async (req, res) => {
       });
       await tracking.save();
     }
-    
+
+    // Notify admins of status updates
+    try {
+      if (status === "Shipped") {
+        await notificationService.sendOrderShipped(order);
+      } else if (status === "Delivered") {
+        await notificationService.sendOrderDelivered(order);
+      } else if (status === "Cancelled") {
+        await notificationService.sendOrderCancelled(order);
+      }
+    } catch (notifError) {
+      console.error("Error triggering order update notification:", notifError);
+    }
+
     console.log(`✅ Order ${order.orderNumber} status updated to ${status}`);
-    
+
     res.status(200).json({
       success: true,
       message: `Order status updated to ${status}`,
       order,
       tracking
     });
-    
+
   } catch (error) {
     console.error("Status update error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -421,7 +455,7 @@ router.get("/admin/all", protect, adminOnly, async (req, res) => {
     const orders = await Order.find()
       .populate("customerId", "name email customerId phone")
       .sort({ createdAt: -1 });
-    
+
     res.status(200).json({ success: true, orders });
   } catch (error) {
     console.error("Get all orders error:", error);
@@ -433,21 +467,21 @@ router.get("/admin/all", protect, adminOnly, async (req, res) => {
 router.get("/my-orders", protect, customerOnly, async (req, res) => {
   try {
     const customer = await Customer.findOne({ email: req.user.email });
-    
+
     if (!customer) {
       return res.status(200).json({ success: true, orders: [] });
     }
-    
+
     const orders = await Order.find({ customerId: customer._id })
       .sort({ createdAt: -1 });
-    
+
     console.log(`📦 Found ${orders.length} orders for customer ${customer.email}`);
     orders.forEach(order => {
       order.items.forEach(item => {
         console.log(`  - ${item.productName}: Size = ${item.size || 'Not specified'}`);
       });
     });
-    
+
     res.status(200).json({ success: true, orders });
   } catch (error) {
     console.error("Error fetching my orders:", error);
@@ -460,11 +494,11 @@ router.get("/:id", protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate("customerId", "name email customerId");
-    
+
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
-    
+
     res.status(200).json({ success: true, order });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -491,15 +525,15 @@ router.delete("/admin/:id", protect, adminOnly, async (req, res) => {
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
-    
+
     console.log(`🗑️ Deleting order: ${order.orderNumber} for customer: ${order.customerEmail}`);
-    
+
     // Delete tracking record
     await Tracking.findOneAndDelete({ orderId: order._id });
-    
+
     // Delete the order
     await order.deleteOne();
-    
+
     // Update customer stats
     const customer = await Customer.findOne({ email: order.customerEmail });
     if (customer) {
@@ -509,9 +543,9 @@ router.delete("/admin/:id", protect, adminOnly, async (req, res) => {
       await customer.save();
       console.log(`✅ Updated customer stats: ${customer.name} - ${customer.orderCount} orders, ₹${customer.totalSpent}`);
     }
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: "Order deleted successfully",
       deletedOrderId: order._id,
       deletedOrderNumber: order.orderNumber
@@ -526,17 +560,17 @@ router.delete("/admin/:id", protect, adminOnly, async (req, res) => {
 router.delete("/admin/delete-all", protect, adminOnly, async (req, res) => {
   try {
     console.log("🗑️ Deleting all orders...");
-    
+
     const result = await Order.deleteMany({});
     await Tracking.deleteMany({});
-    
+
     // Update all customers stats to 0
     await Customer.updateMany({}, { $set: { orderCount: 0, totalSpent: 0 } });
-    
+
     console.log(`✅ Deleted ${result.deletedCount} orders`);
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: `All ${result.deletedCount} orders deleted successfully`,
       deletedCount: result.deletedCount
     });
@@ -551,12 +585,12 @@ router.post("/admin/sync-customers", protect, adminOnly, async (req, res) => {
   try {
     const customers = await Customer.find();
     let updatedCount = 0;
-    
+
     for (const customer of customers) {
       const orders = await Order.find({ customerEmail: customer.email });
       const totalSpent = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
       const orderCount = orders.length;
-      
+
       if (customer.orderCount !== orderCount || customer.totalSpent !== totalSpent) {
         customer.orderCount = orderCount;
         customer.totalSpent = totalSpent;
@@ -565,11 +599,11 @@ router.post("/admin/sync-customers", protect, adminOnly, async (req, res) => {
         console.log(`✅ Synced ${customer.name}: ${orderCount} orders, ₹${totalSpent}`);
       }
     }
-    
-    res.json({ 
-      success: true, 
-      message: `Synced ${updatedCount} customers`, 
-      updatedCount 
+
+    res.json({
+      success: true,
+      message: `Synced ${updatedCount} customers`,
+      updatedCount
     });
   } catch (error) {
     console.error("Sync customers error:", error);

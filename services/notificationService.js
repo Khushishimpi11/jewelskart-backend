@@ -75,19 +75,32 @@ class NotificationService {
   // ========== GET PRIORITY BY TYPE ==========
   getPriorityByType(type) {
     const priorities = {
+      // Urgent
       'out_of_stock': 'urgent',
       'payment_failed': 'urgent',
+      'system_error': 'urgent',
       'customer_complaint': 'urgent',
+      // High
       'low_stock': 'high',
       'new_order': 'high',
       'order_cancelled': 'high',
       'return_request': 'high',
       'exchange_request': 'high',
+      'refund_completed': 'high',
+      // Medium
       'payment_received': 'medium',
+      'refund_processed': 'medium',
       'back_in_stock': 'medium',
       'return_exchange_approved': 'medium',
       'return_exchange_rejected': 'medium',
-      'new_customer': 'low'
+      'order_shipped': 'medium',
+      'order_delivered': 'medium',
+      'new_review': 'medium',
+      'db_backup': 'medium',
+      'cms_update': 'medium',
+      // Low
+      'new_customer': 'low',
+      'system': 'low'
     };
     return priorities[type] || 'medium';
   }
@@ -283,6 +296,108 @@ class NotificationService {
       actionRequired: true,
       actionLink: `/admin/complaints/${complaint._id}`,
       relatedData: { customerId: customer._id, complaintId: complaint._id }
+    });
+  }
+
+  // ========== ORDER LIFECYCLE ==========
+
+  async sendOrderShipped(order) {
+    await this.sendToAdmins({
+      type: "order_shipped",
+      title: "🚚 Order Shipped",
+      message: `Order #${order.orderNumber} has been shipped and is on its way.`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/orders`,
+      relatedData: { orderId: order._id }
+    });
+  }
+
+  async sendOrderDelivered(order) {
+    await this.sendToAdmins({
+      type: "order_delivered",
+      title: "📦 Order Delivered",
+      message: `Order #${order.orderNumber} has been successfully delivered.`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/orders`,
+      relatedData: { orderId: order._id }
+    });
+  }
+
+  async sendRefundCompleted(order, amount) {
+    await this.sendToAdmins({
+      type: "refund_completed",
+      title: "✅ Refund Completed",
+      message: `Refund of ₹${amount} completed for Order #${order.orderNumber}.`,
+      priority: "high",
+      actionRequired: false,
+      actionLink: `/orders`,
+      relatedData: { orderId: order._id }
+    });
+  }
+
+  async sendRefundProcessed(order, amount) {
+    await this.sendToAdmins({
+      type: "refund_processed",
+      title: "💸 Refund Processed",
+      message: `Refund of ₹${amount} has been processed for Order #${order.orderNumber}.`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/orders`,
+      relatedData: { orderId: order._id }
+    });
+  }
+
+  // ========== REVIEW ==========
+
+  async sendNewReview(product, review, customer) {
+    await this.sendToAdmins({
+      type: "new_review",
+      title: "⭐ New Product Review Submitted",
+      message: `${customer?.name || 'A customer'} left a ${review.rating}-star review on "${product.name}".`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/reviews`,
+      relatedData: { productId: product._id, reviewId: review._id }
+    });
+  }
+
+  // ========== SYSTEM ==========
+
+  async sendSystemError(message, details) {
+    await this.sendToAdmins({
+      type: "system_error",
+      title: "🔴 Server/API Error",
+      message: message || "An unexpected server error occurred. Please check the logs.",
+      priority: "urgent",
+      actionRequired: true,
+      actionLink: `/notifications`,
+      relatedData: {}
+    });
+  }
+
+  async sendDatabaseBackupCompleted(details) {
+    await this.sendToAdmins({
+      type: "db_backup",
+      title: "💾 Database Backup Completed",
+      message: details || `Database backup was completed successfully at ${new Date().toLocaleString('en-IN')}.`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/settings`,
+      relatedData: {}
+    });
+  }
+
+  async sendCmsUpdateAvailable(version, notes) {
+    await this.sendToAdmins({
+      type: "cms_update",
+      title: "🆕 New CMS Version Available",
+      message: `CMS version ${version} is available. ${notes || ''}`,
+      priority: "medium",
+      actionRequired: false,
+      actionLink: `/settings`,
+      relatedData: {}
     });
   }
 }
