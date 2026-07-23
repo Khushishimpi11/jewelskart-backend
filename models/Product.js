@@ -110,6 +110,7 @@ const productSchema = new mongoose.Schema({
   status: { type: String, enum: ['Published', 'Draft', 'Archived'], default: 'Draft' },
   featured: { type: Boolean, default: false },
   bestSeller: { type: Boolean, default: false },
+  gst: { type: Number, default: 3 },
 
   goldDetails: { type: goldDetailsSchema, default: () => ({}) },
   specifications: { type: specificationsSchema, default: () => ({}) },

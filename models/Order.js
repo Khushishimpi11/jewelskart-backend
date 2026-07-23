@@ -32,13 +32,18 @@ const orderSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true },
     total: { type: Number, required: true },
-    size: { type: String, default: "" }  // ✅ ADDED: For ring size
+    size: { type: String, default: "" },
+    priceExclGst: { type: Number, default: 0 },
+    gstPercent: { type: Number, default: 3 },
+    gstAmount: { type: Number, default: 0 }
   }],
 
   subtotal: { type: Number, required: true },
   discount: { type: Number, default: 0 },
   shippingCharge: { type: Number, default: 0 },
   tax: { type: Number, default: 0 },
+  gstAmount: { type: Number, default: 0 },
+  totalExclGst: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
 
   // ✅ Payment Method - COD and ONLINE both supported

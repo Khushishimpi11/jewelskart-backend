@@ -42,6 +42,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     }
 
     let subtotal = 0;
+    let totalGstAmount = 0;
     const orderItems = [];
 
     for (const item of items) {
@@ -61,6 +62,11 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       const itemTotal = product.price * item.quantity;
       subtotal += itemTotal;
 
+      const gstPercent = product.gst !== undefined ? product.gst : 3;
+      const priceExclGst = Number((product.price / (1 + gstPercent / 100)).toFixed(2));
+      const itemGstAmount = Number((itemTotal - (priceExclGst * item.quantity)).toFixed(2));
+      totalGstAmount += itemGstAmount;
+
       const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
 
       orderItems.push({
@@ -71,18 +77,22 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         quantity: item.quantity,
         price: product.price,
         total: itemTotal,
-        size: item.size || item.selectedSize || ""
+        size: item.size || item.selectedSize || "",
+        priceExclGst,
+        gstPercent,
+        gstAmount: itemGstAmount
       });
 
-      console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}`);
+      console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}, GST: ${gstPercent}%`);
 
       product.stock -= item.quantity;
       await product.save();
     }
 
     const shippingCharge = subtotal > 5000 ? 0 : 100;
-    const tax = Math.round(subtotal * 0.05);
-    const totalAmount = subtotal + shippingCharge + tax;
+    const tax = Number(totalGstAmount.toFixed(2));
+    const totalAmount = subtotal + shippingCharge;
+    const totalExclGst = Number((subtotal - tax).toFixed(2));
 
     const user = req.user;
 
@@ -120,6 +130,8 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       subtotal,
       shippingCharge,
       tax,
+      gstAmount: tax,
+      totalExclGst,
       totalAmount,
       paymentMethod: paymentMethod || "ONLINE",
       paymentStatus: "PENDING",

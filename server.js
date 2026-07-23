@@ -241,19 +241,19 @@ const getOrderConfirmationEmailHTML = (orderData) => {
       
       <table class="price-table" cellpadding="0" cellspacing="0">
         <tr>
-          <td class="price-label">Subtotal:</td>
-          <td class="price-value">₹${orderData.subtotal?.toLocaleString('en-IN') || '0'}</td>
+          <td class="price-label">Product Price (Excl. GST):</td>
+          <td class="price-value">₹${(orderData.totalExclGst || ((orderData.subtotal || 0) - (orderData.tax || 0)))?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}</td>
+        </tr>
+        <tr>
+          <td class="price-label">GST:</td>
+          <td class="price-value">₹${(orderData.tax || orderData.gstAmount || 0)?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}</td>
         </tr>
         <tr>
           <td class="price-label">Shipping:</td>
-          <td class="price-value">₹${orderData.shippingCharge?.toLocaleString('en-IN') || '0'}</td>
-        </tr>
-        <tr>
-          <td class="price-label">Tax (GST):</td>
-          <td class="price-value">₹${orderData.tax?.toLocaleString('en-IN') || '0'}</td>
+          <td class="price-value">${orderData.shippingCharge === 0 ? 'Free' : `₹${orderData.shippingCharge?.toLocaleString('en-IN') || '0'}`}</td>
         </tr>
         <tr class="total-row">
-          <td class="total-label">Total Amount:</td>
+          <td class="total-label">Grand Total:</td>
           <td class="total-value">₹${totalAmount.toLocaleString('en-IN')}</td>
         </tr>
       </table>
