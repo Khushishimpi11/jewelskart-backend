@@ -17,7 +17,15 @@ const userSchema = new mongoose.Schema({
   
   // Forgot Password fields
   resetPasswordToken: { type: String },
-  resetPasswordExpires: { type: Date }
+  resetPasswordExpires: { type: Date },
+  activeDevices: [{
+    deviceId: { type: String },
+    deviceName: { type: String },
+    deviceType: { type: String, default: "Desktop" },
+    ipAddress: { type: String, default: "" },
+    lastActive: { type: Date, default: Date.now },
+    loginTime: { type: Date, default: Date.now }
+  }]
 });
 
 // Hash password before saving (only if password is modified and exists)

@@ -6,9 +6,9 @@ const customerSchema = new mongoose.Schema({
   customerId: { type: String, unique: true },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true },
-  password: { 
-    type: String, 
-    required: function() {
+  password: {
+    type: String,
+    required: function () {
       return !this.googleId && this.isNew;
     }
   },
@@ -36,11 +36,19 @@ const customerSchema = new mongoose.Schema({
   totalSpent: { type: Number, default: 0 },
   orderCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  lastLogin: { type: Date }
+  lastLogin: { type: Date },
+  activeDevices: [{
+    deviceId: { type: String },
+    deviceName: { type: String },
+    deviceType: { type: String, default: "Desktop" },
+    ipAddress: { type: String, default: "" },
+    lastActive: { type: Date, default: Date.now },
+    loginTime: { type: Date, default: Date.now }
+  }]
 });
 
 // Auto-generate customerId using counter collection
-customerSchema.pre("save", async function(next) {
+customerSchema.pre("save", async function (next) {
   try {
     if (!this.customerId) {
       console.log("🔑 Generating customerId for:", this.email);
@@ -56,7 +64,7 @@ customerSchema.pre("save", async function(next) {
 });
 
 // Hash password before saving
-customerSchema.pre("save", async function(next) {
+customerSchema.pre("save", async function (next) {
   try {
     if (this.password && this.isModified("password")) {
       console.log("🔐 Hashing password for:", this.email);
@@ -72,9 +80,9 @@ customerSchema.pre("save", async function(next) {
 });
 
 // ✅ CASCADE DELETE: Jab customer delete ho, toh saare orders bhi delete ho
-customerSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+customerSchema.pre('deleteOne', { document: true, query: false }, async function (next) {
   console.log(`🗑️ Cascade delete: Deleting all orders for customer: ${this.email}`);
-  
+
   try {
     const Order = mongoose.model('Order');
     const result = await Order.deleteMany({ customerId: this._id });
@@ -87,10 +95,10 @@ customerSchema.pre('deleteOne', { document: true, query: false }, async function
 });
 
 // For findByIdAndDelete
-customerSchema.pre('findOneAndDelete', async function(next) {
+customerSchema.pre('findOneAndDelete', async function (next) {
   const customerId = this.getQuery()._id;
   console.log(`🗑️ Cascade delete: Deleting all orders for customer ID: ${customerId}`);
-  
+
   try {
     const Order = mongoose.model('Order');
     const result = await Order.deleteMany({ customerId: customerId });
@@ -103,7 +111,7 @@ customerSchema.pre('findOneAndDelete', async function(next) {
 });
 
 // Compare password method
-customerSchema.methods.comparePassword = async function(password) {
+customerSchema.methods.comparePassword = async function (password) {
   try {
     if (!this.password) {
       console.log("❌ No password stored for user:", this.email);

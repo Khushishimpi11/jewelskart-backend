@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require("crypto");
 const Customer = require("../models/Customer");
 const User = require("../models/User");
-const Order = require("../models/Order"); // ✅ Import Order model for cascade delete
+const Order = require("../models/Order");
 const jwt = require("jsonwebtoken");
 const { protect, adminOnly } = require("../middleware/auth");
 const notificationService = require("../services/notificationService");
@@ -12,13 +12,66 @@ const {
   sendCustomerPasswordResetEmail
 } = require("../services/emailService");
 
-const generateToken = (id, email, role, name, customerId) => {
+const generateToken = (id, email, role, name, customerId, deviceId) => {
   return jwt.sign(
-    { id, email, role, name, customerId },
+    { id, email, role, name, customerId, deviceId },
     process.env.JWT_SECRET || "jewelskart_secret_key_2024",
     { expiresIn: "90d" }
   );
 };
+
+const parseDevice = (req) => {
+  const ua = req.headers["user-agent"] || "";
+  let deviceType = "Desktop";
+  if (/mobile|android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+    deviceType = /ipad|tablet/i.test(ua) ? "Tablet" : "Mobile";
+  }
+
+  let browser = "Browser";
+  if (ua.includes("Firefox/")) browser = "Firefox";
+  else if (ua.includes("Edg/")) browser = "Edge";
+  else if (ua.includes("Chrome/")) browser = "Chrome";
+  else if (ua.includes("Safari/")) browser = "Safari";
+  else if (ua.includes("OPR/") || ua.includes("Opera/")) browser = "Opera";
+
+  let os = "Device";
+  if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Mac OS") || ua.includes("Macintosh")) os = "macOS";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+  else if (ua.includes("Linux")) os = "Linux";
+
+  const deviceName = `${browser} on ${os}`;
+  const ipAddress = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "127.0.0.1";
+
+  return { deviceName, deviceType, ipAddress };
+};
+
+const registerActiveDevice = async (account, req) => {
+  const deviceId = crypto.randomBytes(16).toString("hex");
+  const { deviceName, deviceType, ipAddress } = parseDevice(req);
+
+  if (!account.activeDevices) {
+    account.activeDevices = [];
+  }
+
+  account.activeDevices.push({
+    deviceId,
+    deviceName,
+    deviceType,
+    ipAddress,
+    lastActive: new Date(),
+    loginTime: new Date()
+  });
+
+  if (account.activeDevices.length > 10) {
+    account.activeDevices = account.activeDevices.slice(-10);
+  }
+
+  await account.save();
+  return deviceId;
+};
+
 
 // Password validation function
 const isValidPassword = (password) => {
@@ -92,7 +145,7 @@ router.post("/google", async (req, res) => {
     }
 
     customer.lastLogin = new Date();
-    await customer.save();
+    const deviceId = await registerActiveDevice(customer, req);
 
     if (isNewCustomer) {
       await notificationService.sendNewCustomer(customer);
@@ -103,8 +156,10 @@ router.post("/google", async (req, res) => {
       customer.email,
       "customer",
       customer.name,
-      customer.customerId
+      customer.customerId,
+      deviceId
     );
+
 
     res.status(200).json({
       success: true,
@@ -186,13 +241,10 @@ router.post("/admin/google", async (req, res) => {
     }
 
     admin.lastLogin = new Date();
-    await admin.save();
+    const deviceId = await registerActiveDevice(admin, req);
 
-    const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: "admin", name: admin.name },
-      process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "90d" }
-    );
+    const token = generateToken(admin._id, admin.email, "admin", admin.name, null, deviceId);
+
 
     res.status(200).json({
       success: true,
@@ -221,19 +273,23 @@ router.post("/admin/forgot-password", async (req, res) => {
     console.log("🔍 Admin forgot password request for:", email);
 
     if (!email) {
+      console.log("❌ Admin forgot password failed: Email is missing in request body");
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    const admin = await User.findOne({ email, role: "admin" });
+    const cleanEmail = email.trim().toLowerCase();
+    const admin = await User.findOne({ email: cleanEmail, role: "admin" });
 
     if (!admin) {
+      console.log("⚠️ Admin user not found for email:", cleanEmail);
       return res.status(200).json({
         success: true,
         message: "If email exists, password reset link will be sent"
       });
     }
 
-    if (admin.isGoogleUser) {
+    if (admin.isGoogleUser && !admin.password) {
+      console.log("❌ Admin forgot password failed: Account is Google-only login");
       return res.status(400).json({
         success: false,
         message: "This account uses Google Sign-In. Please login with Google."
@@ -246,7 +302,13 @@ router.post("/admin/forgot-password", async (req, res) => {
     admin.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await admin.save();
 
-    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:8080"}/reset-password?token=${resetToken}&email=${email}`;
+    const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const defaultAdminUrl = process.env.NODE_ENV === "development" ? "http://localhost:8080" : "https://admin.jewelskartindia.com";
+    const adminFrontendUrl = (requestOrigin && !requestOrigin.includes("render.com")) 
+      ? requestOrigin.replace(/\/$/, "") 
+      : (process.env.ADMIN_URL || process.env.FRONTEND_URL || defaultAdminUrl);
+
+    const resetUrl = `${adminFrontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
     console.log("📧 Admin Password Reset URL:", resetUrl);
 
@@ -476,7 +538,9 @@ router.post("/customer/register", async (req, res) => {
       }
     });
 
-    const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId);
+    const deviceId = await registerActiveDevice(customer, req);
+    const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId, deviceId);
+
 
     await notificationService.sendNewCustomer(customer);
 
@@ -529,9 +593,10 @@ router.post("/customer/login", async (req, res) => {
     }
 
     customer.lastLogin = new Date();
-    await customer.save();
+    const deviceId = await registerActiveDevice(customer, req);
 
-    const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId);
+    const token = generateToken(customer._id, customer.email, "customer", customer.name, customer.customerId, deviceId);
+
 
     res.status(200).json({
       success: true,
@@ -565,9 +630,15 @@ router.put("/update-profile", protect, async (req, res) => {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
-    const fullName = `${firstName} ${lastName}`.trim();
+    let fullName = customer.name;
+    if (firstName !== undefined || lastName !== undefined) {
+      const fName = firstName || "";
+      const lName = lastName || "";
+      fullName = `${fName} ${lName}`.trim();
+    }
+
     if (fullName) customer.name = fullName;
-    if (phone) customer.phone = phone;
+    if (phone !== undefined) customer.phone = phone;
 
     await customer.save();
 
@@ -589,6 +660,105 @@ router.put("/update-profile", protect, async (req, res) => {
   } catch (error) {
     console.error("Update profile error:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ CHANGE PASSWORD ============
+router.post("/change-password", protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    console.log("🔐 Password change request received for user:", req.user.id);
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required"
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long"
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from current password"
+      });
+    }
+
+    // Check if user is customer or admin
+    let user;
+    let userType;
+
+    if (req.user.role === "customer") {
+      user = await Customer.findById(req.user.id);
+      userType = "customer";
+    } else {
+      user = await User.findById(req.user.id);
+      userType = "admin";
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Check if user is a Google user
+    if (user.isGoogleUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Google users cannot change password. Please use Google Sign-In."
+      });
+    }
+
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect"
+      });
+    }
+
+    // Set new password
+    user.password = newPassword;
+    await user.save();
+
+    console.log(`✅ Password changed successfully for ${userType}: ${user.email}`);
+
+    // Send notification (optional)
+    if (userType === "customer") {
+      try {
+        await notificationService.sendNotification(
+          user._id,
+          "Password Changed",
+          "Your password has been changed successfully. If you didn't make this change, please contact support immediately.",
+          "security"
+        );
+      } catch (notifError) {
+        console.log("⚠️ Notification failed but password change succeeded:", notifError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully"
+    });
+
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to change password"
+    });
   }
 });
 
@@ -751,7 +921,7 @@ router.put("/customers/:id", protect, adminOnly, async (req, res) => {
   }
 });
 
-// ============ DELETE CUSTOMER (UPDATED WITH CASCADE DELETE) ============
+// ============ DELETE CUSTOMER ============
 router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id);
@@ -761,11 +931,9 @@ router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
 
     console.log(`🗑️ Deleting customer: ${customer.email} (${customer.customerId})`);
 
-    // ✅ Step 1: Delete all orders for this customer
     const deletedOrders = await Order.deleteMany({ customerId: customer._id });
     console.log(`✅ Deleted ${deletedOrders.deletedCount} orders for customer`);
 
-    // ✅ Step 2: Delete the customer
     await customer.deleteOne();
 
     res.status(200).json({
@@ -782,7 +950,7 @@ router.delete("/customers/:id", protect, adminOnly, async (req, res) => {
   }
 });
 
-// ============ CHECK IF USER EXISTS (For Auto Logout) ============
+// ============ CHECK IF USER EXISTS ============
 router.post("/check-user-exists", async (req, res) => {
   try {
     const { email } = req.body;
@@ -809,16 +977,25 @@ router.post("/admin/register", async (req, res) => {
     const { name, email, password, secretKey } = req.body;
     const ADMIN_SECRET = process.env.ADMIN_SECRET || "ADMIN_SECRET_2024";
 
+    if (!email || !password || !name) {
+      console.log("❌ Admin registration failed: Missing required fields");
+      return res.status(400).json({ success: false, message: "Name, email, and password are required" });
+    }
+
     if (secretKey !== ADMIN_SECRET) {
+      console.log("❌ Admin registration failed: Invalid secret key");
       return res.status(403).json({ success: false, message: "Invalid secret key" });
     }
 
-    const existingAdmin = await User.findOne({ email });
+    const cleanEmail = email.trim().toLowerCase();
+    const existingAdmin = await User.findOne({ email: cleanEmail });
     if (existingAdmin) {
-      return res.status(400).json({ success: false, message: "Admin already exists" });
+      console.log("❌ Admin registration failed: Admin already exists for", cleanEmail);
+      return res.status(400).json({ success: false, message: "Admin already exists with this email" });
     }
 
     if (!isValidPassword(password)) {
+      console.log("❌ Admin registration failed: Password does not meet requirements");
       return res.status(400).json({
         success: false,
         message: "Password must be at least 8 characters with at least 1 number and 1 special character (!@#$%^&*)"
@@ -827,17 +1004,16 @@ router.post("/admin/register", async (req, res) => {
 
     const admin = await User.create({
       name,
-      email,
+      email: cleanEmail,
       password,
       role: "admin",
       isGoogleUser: false
     });
 
-    const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: "admin", name: admin.name },
-      process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "90d" }
-    );
+
+    const deviceId = await registerActiveDevice(admin, req);
+    const token = generateToken(admin._id, admin.email, "admin", admin.name, null, deviceId);
+
 
     res.status(201).json({
       success: true,
@@ -879,13 +1055,10 @@ router.post("/admin/login", async (req, res) => {
     }
 
     admin.lastLogin = new Date();
-    await admin.save();
+    const deviceId = await registerActiveDevice(admin, req);
 
-    const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: "admin", name: admin.name },
-      process.env.JWT_SECRET || "jewelskart_secret_key_2024",
-      { expiresIn: "90d" }
-    );
+    const token = generateToken(admin._id, admin.email, "admin", admin.name, null, deviceId);
+
 
     res.status(200).json({
       success: true,
@@ -990,4 +1163,223 @@ router.get("/me", protect, async (req, res) => {
   }
 });
 
+// ============ CUSTOMER FORGOT PASSWORD ============
+router.post("/customer/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+
+    // Always return success to avoid email enumeration
+    if (!customer) {
+      return res.status(200).json({
+        success: true,
+        message: "If an account with that email exists, a reset link has been sent."
+      });
+    }
+
+    if (customer.isGoogleUser && !customer.password) {
+      return res.status(400).json({
+        success: false,
+        message: "This account uses Google Sign-In. Password reset is not available."
+      });
+    }
+
+    // Generate a secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    customer.resetPasswordToken = resetToken;
+    customer.resetPasswordExpires = resetTokenExpires;
+    await customer.save();
+
+    const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const defaultWebsiteUrl = process.env.NODE_ENV === "development" ? "http://localhost:8080" : "https://www.jewelskartindia.com";
+    const websiteUrl = (requestOrigin && !requestOrigin.includes("render.com")) 
+      ? requestOrigin.replace(/\/$/, "") 
+      : (process.env.WEBSITE_URL || defaultWebsiteUrl);
+
+    const resetUrl = `${websiteUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(customer.email)}`;
+
+    console.log("📧 Sending password reset email to:", customer.email);
+    console.log("🔗 Reset URL:", resetUrl);
+
+    const emailSent = await sendCustomerPasswordResetEmail(customer.email, resetUrl, customer.name);
+
+    if (!emailSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send reset email. Please try again later."
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "If an account with that email exists, a reset link has been sent."
+    });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// ============ CUSTOMER RESET PASSWORD ============
+router.post("/customer/reset-password", async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ success: false, message: "Email, token, and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+
+    const customer = await Customer.findOne({
+      email: email.toLowerCase(),
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!customer) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset link. Please request a new one."
+      });
+    }
+
+    // Update the password and clear the reset token
+    customer.password = newPassword;
+    customer.resetPasswordToken = undefined;
+    customer.resetPasswordExpires = undefined;
+    await customer.save();
+
+    console.log("✅ Password reset successfully for:", customer.email);
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been reset successfully. You can now log in with your new password."
+    });
+
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// ============ GET ACTIVE DEVICES ============
+router.get("/active-devices", protect, async (req, res) => {
+  try {
+    let account;
+    if (req.user.role === "customer") {
+      account = await Customer.findById(req.user.id);
+    } else {
+      account = await User.findById(req.user.id);
+    }
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Ensure activeDevices exists
+    if (!account.activeDevices || account.activeDevices.length === 0) {
+      const currentDeviceId = req.user.deviceId || crypto.randomBytes(16).toString("hex");
+      const { deviceName, deviceType, ipAddress } = parseDevice(req);
+      account.activeDevices = [{
+        deviceId: currentDeviceId,
+        deviceName,
+        deviceType,
+        ipAddress,
+        lastActive: new Date(),
+        loginTime: new Date()
+      }];
+      await account.save();
+    } else if (req.user.deviceId) {
+      const currentDev = account.activeDevices.find(d => d.deviceId === req.user.deviceId);
+      if (currentDev) {
+        currentDev.lastActive = new Date();
+        await account.save();
+      }
+    }
+
+    const currentDeviceId = req.user.deviceId;
+
+    const devices = (account.activeDevices || []).map(d => ({
+      deviceId: d.deviceId,
+      deviceName: d.deviceName,
+      deviceType: d.deviceType,
+      ipAddress: d.ipAddress,
+      lastActive: d.lastActive,
+      loginTime: d.loginTime,
+      isCurrentDevice: currentDeviceId ? d.deviceId === currentDeviceId : false
+    }));
+
+    res.json({ success: true, count: devices.length, devices });
+  } catch (error) {
+    console.error("Get active devices error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ REVOKE ALL OTHER DEVICES ============
+router.delete("/active-devices-all-other", protect, async (req, res) => {
+  try {
+    const currentDeviceId = req.user.deviceId;
+    let account;
+    if (req.user.role === "customer") {
+      account = await Customer.findById(req.user.id);
+    } else {
+      account = await User.findById(req.user.id);
+    }
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (currentDeviceId) {
+      account.activeDevices = (account.activeDevices || []).filter(d => d.deviceId === currentDeviceId);
+    } else {
+      account.activeDevices = [];
+    }
+    await account.save();
+
+    res.json({ success: true, message: "All other device sessions logged out successfully" });
+  } catch (error) {
+    console.error("Revoke all other devices error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ REVOKE SINGLE DEVICE ============
+router.delete("/active-devices/:deviceId", protect, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    let account;
+    if (req.user.role === "customer") {
+      account = await Customer.findById(req.user.id);
+    } else {
+      account = await User.findById(req.user.id);
+    }
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    account.activeDevices = (account.activeDevices || []).filter(d => d.deviceId !== deviceId);
+    await account.save();
+
+    res.json({ success: true, message: "Device session revoked successfully" });
+  } catch (error) {
+    console.error("Revoke device error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
+
