@@ -15,12 +15,16 @@ const app = express();
 // ========== EMAIL CONFIGURATION ==========
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: process.env.EMAIL_PORT || 587,
+  port: parseInt(process.env.EMAIL_PORT) || 587,
   secure: false,
   auth: {
     user: process.env.EMAIL_USER || "jewelskartindia16@gmail.com",
     pass: process.env.EMAIL_PASS || "leud gwxk fxjz pedg",
   },
+  // Prevent hanging: fail fast if SMTP connection is slow/blocked
+  connectionTimeout: 10000,  // 10 seconds to connect
+  greetingTimeout: 10000,    // 10 seconds for greeting
+  socketTimeout: 30000,      // 30 seconds per socket operation
 });
 
 // Verify email configuration on startup

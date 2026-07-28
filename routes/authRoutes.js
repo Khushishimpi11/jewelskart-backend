@@ -312,17 +312,23 @@ router.post("/admin/forgot-password", async (req, res) => {
 
     console.log("📧 Admin Password Reset URL:", resetUrl);
 
-    await sendAdminPasswordResetEmail(email, resetUrl, admin.name);
-
+    // ✅ Respond immediately — don't wait for email to send (prevents UI from getting stuck loading)
     res.status(200).json({
       success: true,
-      message: "Password reset link has been sent to your email",
+      message: "If an account with that email exists, a reset link has been sent.",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
 
+    // Send email in background after responding
+    sendAdminPasswordResetEmail(email, resetUrl, admin.name)
+      .then(() => console.log("✅ Admin reset email sent to:", email))
+      .catch(err => console.error("❌ Admin reset email failed:", err.message));
+
   } catch (error) {
     console.error("Admin forgot password error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   }
 });
 
@@ -388,9 +394,10 @@ router.post("/customer/forgot-password", async (req, res) => {
     const customer = await Customer.findOne({ email });
 
     if (!customer) {
+      // ✅ Respond immediately even if email not found (security best practice)
       return res.status(200).json({
         success: true,
-        message: "If email exists, password reset link will be sent"
+        message: "If an account with that email exists, a reset link has been sent."
       });
     }
 
@@ -407,21 +414,27 @@ router.post("/customer/forgot-password", async (req, res) => {
     customer.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await customer.save();
 
-    const resetUrl = `${process.env.WEBSITE_URL || "http://localhost:8081"}/reset-password?token=${resetToken}&email=${email}`;
+    const resetUrl = `${process.env.WEBSITE_URL || "http://localhost:8081"}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
     console.log("📧 Customer Password Reset URL:", resetUrl);
 
-    await sendCustomerPasswordResetEmail(email, resetUrl, customer.name);
-
+    // ✅ Respond immediately — don't wait for email to send (prevents UI from getting stuck loading)
     res.status(200).json({
       success: true,
-      message: "Password reset link sent to your email",
+      message: "If an account with that email exists, a reset link has been sent.",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
 
+    // Send email in background after responding
+    sendCustomerPasswordResetEmail(email, resetUrl, customer.name)
+      .then(() => console.log("✅ Customer reset email sent to:", email))
+      .catch(err => console.error("❌ Customer reset email failed:", err.message));
+
   } catch (error) {
     console.error("Customer forgot password error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   }
 });
 
