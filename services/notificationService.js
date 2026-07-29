@@ -117,7 +117,7 @@ class NotificationService {
   async getAdminNotifications(adminId, limit = 50, skip = 0, filter = {}) {
     let query = { adminId, forRole: "admin", ...filter };
     return await Notification.find(query)
-      .sort({ priority: 1, createdAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
   }

@@ -213,9 +213,15 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         console.error("❌ Email sending failed:", emailError.message);
       }
 
-      // Notify Admins of new COD order
+      // Notify Admins and Customer of new order
       try {
         await notificationService.sendNewOrder(order);
+        await notificationService.sendToCustomer(user.id, customer.email, {
+          type: "order",
+          title: "🛍️ Order Placed Successfully!",
+          message: `Your order #${order.orderNumber} for ₹${totalAmount.toLocaleString('en-IN')} has been placed successfully.`,
+          relatedData: { orderId: order._id }
+        });
       } catch (notifErr) {
         console.error("Order creation notify error:", notifErr);
       }

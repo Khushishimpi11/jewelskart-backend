@@ -47,6 +47,15 @@ router.put("/read-all", protect, customerOnly, async (req, res) => {
   }
 });
 
+router.delete("/my-notifications/clear-all", protect, customerOnly, async (req, res) => {
+  try {
+    await Notification.deleteMany({ userId: req.user.id });
+    res.json({ success: true, message: "All notifications cleared successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.delete("/:id", protect, customerOnly, async (req, res) => {
   try {
     await Notification.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
@@ -87,6 +96,16 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
 });
 
 // ✅ STATIC ROUTES FIRST (before /:id wildcards to avoid conflicts)
+
+// Clear all admin notifications — must be before /:id
+router.delete("/admin/notifications/clear-all", protect, adminOnly, async (req, res) => {
+  try {
+    await Notification.deleteMany({ adminId: req.user.id, forRole: "admin" });
+    res.json({ success: true, message: "All admin notifications cleared successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Mark all as read — must be before /:id/read
 router.put("/admin/notifications/read-all", protect, adminOnly, async (req, res) => {

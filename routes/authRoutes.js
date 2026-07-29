@@ -569,6 +569,11 @@ router.post("/customer/register", async (req, res) => {
 
 
     await notificationService.sendNewCustomer(customer);
+    await notificationService.sendToCustomer(customer._id, customer.email, {
+      type: "system",
+      title: "🎉 Welcome to JewelsKart!",
+      message: `Hello ${customer.name}, welcome to JewelsKart! Start exploring our exclusive jewellery collection.`
+    });
 
     res.status(201).json({
       success: true,
