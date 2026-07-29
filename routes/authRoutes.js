@@ -282,9 +282,9 @@ router.post("/admin/forgot-password", async (req, res) => {
 
     if (!admin) {
       console.log("⚠️ Admin user not found for email:", cleanEmail);
-      return res.status(200).json({
-        success: true,
-        message: "If email exists, password reset link will be sent"
+      return res.status(404).json({
+        success: false,
+        message: "No admin account found with this email address."
       });
     }
 
@@ -303,32 +303,35 @@ router.post("/admin/forgot-password", async (req, res) => {
     await admin.save();
 
     const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-    const defaultAdminUrl = process.env.NODE_ENV === "development" ? "http://localhost:8080" : "https://admin.jewelskartindia.com";
+    const defaultAdminUrl = "https://admin.jewelskartindia.com";
     const adminFrontendUrl = (requestOrigin && !requestOrigin.includes("render.com")) 
       ? requestOrigin.replace(/\/$/, "") 
       : (process.env.ADMIN_URL || process.env.FRONTEND_URL || defaultAdminUrl);
 
-    const resetUrl = `${adminFrontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+    const resetUrl = `${adminFrontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(cleanEmail)}`;
 
     console.log("📧 Admin Password Reset URL:", resetUrl);
 
-    // ✅ Respond immediately — don't wait for email to send (prevents UI from getting stuck loading)
+    // Send email and wait for result
+    const emailSent = await sendAdminPasswordResetEmail(cleanEmail, resetUrl, admin.name);
+
+    if (!emailSent) {
+      console.error("❌ Failed to send admin password reset email to:", cleanEmail);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send password reset email. Please check server email configuration or try again later."
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: "If an account with that email exists, a reset link has been sent.",
+      message: "Password reset link has been sent to your email address.",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
 
-    // Send email in background after responding
-    sendAdminPasswordResetEmail(email, resetUrl, admin.name)
-      .then(() => console.log("✅ Admin reset email sent to:", email))
-      .catch(err => console.error("❌ Admin reset email failed:", err.message));
-
   } catch (error) {
     console.error("Admin forgot password error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, message: error.message });
-    }
+    res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 });
 
@@ -391,20 +394,21 @@ router.post("/customer/forgot-password", async (req, res) => {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    const customer = await Customer.findOne({ email });
+    const cleanEmail = email.trim().toLowerCase();
+    const customer = await Customer.findOne({ email: cleanEmail });
 
     if (!customer) {
-      // ✅ Respond immediately even if email not found (security best practice)
-      return res.status(200).json({
-        success: true,
-        message: "If an account with that email exists, a reset link has been sent."
+      console.log("⚠️ Customer user not found for email:", cleanEmail);
+      return res.status(404).json({
+        success: false,
+        message: "No customer account found with this email address."
       });
     }
 
-    if (customer.isGoogleUser) {
+    if (customer.isGoogleUser && !customer.password) {
       return res.status(400).json({
         success: false,
-        message: "This account uses Google Sign-In. Please login with Google."
+        message: "This account uses Google Sign-In. Password reset is not available."
       });
     }
 
@@ -414,27 +418,36 @@ router.post("/customer/forgot-password", async (req, res) => {
     customer.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await customer.save();
 
-    const resetUrl = `${process.env.WEBSITE_URL || "http://localhost:8081"}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+    const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const defaultWebsiteUrl = "https://www.jewelskartindia.com";
+    const websiteUrl = (requestOrigin && !requestOrigin.includes("render.com")) 
+      ? requestOrigin.replace(/\/$/, "") 
+      : (process.env.WEBSITE_URL || defaultWebsiteUrl);
+
+    const resetUrl = `${websiteUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(cleanEmail)}`;
 
     console.log("📧 Customer Password Reset URL:", resetUrl);
 
-    // ✅ Respond immediately — don't wait for email to send (prevents UI from getting stuck loading)
+    // Send email and wait for result
+    const emailSent = await sendCustomerPasswordResetEmail(cleanEmail, resetUrl, customer.name);
+
+    if (!emailSent) {
+      console.error("❌ Failed to send customer password reset email to:", cleanEmail);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send password reset email. Please check server email configuration or try again later."
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: "If an account with that email exists, a reset link has been sent.",
+      message: "Password reset link has been sent to your email address.",
       resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
     });
 
-    // Send email in background after responding
-    sendCustomerPasswordResetEmail(email, resetUrl, customer.name)
-      .then(() => console.log("✅ Customer reset email sent to:", email))
-      .catch(err => console.error("❌ Customer reset email failed:", err.message));
-
   } catch (error) {
     console.error("Customer forgot password error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, message: error.message });
-    }
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -1173,6 +1186,116 @@ router.get("/me", protect, async (req, res) => {
   } catch (error) {
     console.error("Get current user error:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============ CUSTOMER FORGOT PASSWORD ============
+router.post("/customer/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+
+    // Always return success to avoid email enumeration
+    if (!customer) {
+      return res.status(200).json({
+        success: true,
+        message: "If an account with that email exists, a reset link has been sent."
+      });
+    }
+
+    if (customer.isGoogleUser && !customer.password) {
+      return res.status(400).json({
+        success: false,
+        message: "This account uses Google Sign-In. Password reset is not available."
+      });
+    }
+
+    // Generate a secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    customer.resetPasswordToken = resetToken;
+    customer.resetPasswordExpires = resetTokenExpires;
+    await customer.save();
+
+    const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const defaultWebsiteUrl = process.env.NODE_ENV === "development" ? "http://localhost:8080" : "https://www.jewelskartindia.com";
+    const websiteUrl = (requestOrigin && !requestOrigin.includes("render.com"))
+      ? requestOrigin.replace(/\/$/, "")
+      : (process.env.WEBSITE_URL || defaultWebsiteUrl);
+
+    const resetUrl = `${websiteUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(customer.email)}`;
+
+    console.log("📧 Sending password reset email to:", customer.email);
+    console.log("🔗 Reset URL:", resetUrl);
+
+    const emailSent = await sendCustomerPasswordResetEmail(customer.email, resetUrl, customer.name);
+
+    if (!emailSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send reset email. Please try again later."
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "If an account with that email exists, a reset link has been sent."
+    });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// ============ CUSTOMER RESET PASSWORD ============
+router.post("/customer/reset-password", async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ success: false, message: "Email, token, and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+
+    const customer = await Customer.findOne({
+      email: email.toLowerCase(),
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!customer) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset link. Please request a new one."
+      });
+    }
+
+    // Update the password and clear the reset token
+    customer.password = newPassword;
+    customer.resetPasswordToken = undefined;
+    customer.resetPasswordExpires = undefined;
+    await customer.save();
+
+    console.log("✅ Password reset successfully for:", customer.email);
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been reset successfully. You can now log in with your new password."
+    });
+
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
