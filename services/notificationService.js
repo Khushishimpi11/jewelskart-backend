@@ -110,7 +110,8 @@ class NotificationService {
     return await Notification.countDocuments({ 
       adminId, 
       isRead: false, 
-      forRole: "admin" 
+      forRole: "admin",
+      isDismissed: { $ne: true }
     });
   }
   

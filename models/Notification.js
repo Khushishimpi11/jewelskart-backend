@@ -72,6 +72,9 @@ const notificationSchema = new mongoose.Schema({
   actionRequired: { type: Boolean, default: false },
   actionLink: { type: String },
   
+  // Soft-clear: hides from UI without deleting the record
+  isDismissed: { type: Boolean, default: false },
+
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date }
 });

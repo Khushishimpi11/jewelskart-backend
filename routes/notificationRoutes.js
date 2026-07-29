@@ -8,13 +8,14 @@ const { protect, adminOnly, customerOnly } = require("../middleware/auth");
 
 router.get("/my-notifications", protect, customerOnly, async (req, res) => {
   try {
-    const notifications = await Notification.find({ userId: req.user.id })
+    const notifications = await Notification.find({ userId: req.user.id, isDismissed: { $ne: true } })
       .sort({ createdAt: -1 })
       .limit(50);
     
     const unreadCount = await Notification.countDocuments({ 
       userId: req.user.id, 
-      isRead: false 
+      isRead: false,
+      isDismissed: { $ne: true }
     });
     
     res.json({ success: true, notifications, unreadCount });
@@ -49,7 +50,11 @@ router.put("/read-all", protect, customerOnly, async (req, res) => {
 
 router.delete("/my-notifications/clear-all", protect, customerOnly, async (req, res) => {
   try {
-    await Notification.deleteMany({ userId: req.user.id });
+    // Soft-clear: mark as dismissed instead of deleting from DB
+    await Notification.updateMany(
+      { userId: req.user.id, isDismissed: { $ne: true } },
+      { isDismissed: true }
+    );
     res.json({ success: true, message: "All notifications cleared successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -72,7 +77,7 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
   try {
     const { limit = 50, skip = 0, priority, type } = req.query;
     
-    let filter = {};
+    let filter = { isDismissed: { $ne: true } };
     if (priority) filter.priority = priority;
     if (type) filter.type = type;
     
@@ -86,7 +91,8 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
     const unreadCount = await notificationService.getAdminUnreadCount(req.user.id);
     const totalCount = await Notification.countDocuments({ 
       adminId: req.user.id, 
-      forRole: "admin" 
+      forRole: "admin",
+      isDismissed: { $ne: true }
     });
     
     res.json({ success: true, notifications, unreadCount, totalCount });
@@ -97,10 +103,14 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
 
 // ✅ STATIC ROUTES FIRST (before /:id wildcards to avoid conflicts)
 
-// Clear all admin notifications — must be before /:id
+// Clear all admin notifications (soft-clear) — must be before /:id
 router.delete("/admin/notifications/clear-all", protect, adminOnly, async (req, res) => {
   try {
-    await Notification.deleteMany({ adminId: req.user.id, forRole: "admin" });
+    // Soft-clear: mark as dismissed instead of deleting from DB
+    await Notification.updateMany(
+      { adminId: req.user.id, forRole: "admin", isDismissed: { $ne: true } },
+      { isDismissed: true }
+    );
     res.json({ success: true, message: "All admin notifications cleared successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -120,20 +130,20 @@ router.put("/admin/notifications/read-all", protect, adminOnly, async (req, res)
 // Get notification stats — must be before /:id
 router.get("/admin/notifications/stats", protect, adminOnly, async (req, res) => {
   try {
+    const baseFilter = { adminId: req.user.id, forRole: "admin", isDismissed: { $ne: true } };
     const stats = {
-      total: await Notification.countDocuments({ adminId: req.user.id, forRole: "admin" }),
+      total: await Notification.countDocuments(baseFilter),
       unread: await notificationService.getAdminUnreadCount(req.user.id),
-      urgent: await Notification.countDocuments({ adminId: req.user.id, priority: "urgent", isRead: false }),
-      high: await Notification.countDocuments({ adminId: req.user.id, priority: "high", isRead: false }),
-      medium: await Notification.countDocuments({ adminId: req.user.id, priority: "medium", isRead: false }),
-      low: await Notification.countDocuments({ adminId: req.user.id, priority: "low", isRead: false })
+      urgent: await Notification.countDocuments({ ...baseFilter, priority: "urgent", isRead: false }),
+      high: await Notification.countDocuments({ ...baseFilter, priority: "high", isRead: false }),
+      medium: await Notification.countDocuments({ ...baseFilter, priority: "medium", isRead: false }),
+      low: await Notification.countDocuments({ ...baseFilter, priority: "low", isRead: false })
     };
     
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     stats.last7Days = await Notification.countDocuments({
-      adminId: req.user.id,
-      forRole: "admin",
+      ...baseFilter,
       createdAt: { $gte: sevenDaysAgo }
     });
     
