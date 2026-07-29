@@ -106,21 +106,124 @@ class NotificationService {
   }
   
   // ========== ADMIN HELPER METHODS ==========
-  async getAdminUnreadCount(adminId) {
-    return await Notification.countDocuments({ 
-      adminId, 
-      isRead: false, 
-      forRole: "admin",
-      isDismissed: { $ne: true }
-    });
+  async getAdminUnreadCount(adminId, bellClearedAt = null) {
+    let query = { adminId, isRead: false, forRole: "admin" };
+    if (bellClearedAt) {
+      query.createdAt = { $gt: bellClearedAt };
+    }
+    return await Notification.countDocuments(query);
   }
   
-  async getAdminNotifications(adminId, limit = 50, skip = 0, filter = {}) {
+  async getAdminNotifications(adminId, limit = 50, skip = 0, filter = {}, bellClearedAt = null) {
     let query = { adminId, forRole: "admin", ...filter };
+    if (bellClearedAt) {
+      query.createdAt = { $gt: bellClearedAt };
+    }
     return await Notification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
+  }
+
+  // ========== CUSTOMER ORDER STATUS NOTIFICATION SENDER ==========
+  async sendCustomerOrderStatusNotification(order, status) {
+    if (!order) return;
+    
+    const customerId = order.userId || order.customerId;
+    const customerEmail = order.customerEmail;
+    if (!customerId && !customerEmail) return;
+
+    const statusMap = {
+      "Confirmed": {
+        type: "order_confirmed",
+        title: "Order Confirmed! 🎉",
+        message: `Your order #${order.orderNumber} has been confirmed.`
+      },
+      "Processing": {
+        type: "order_processing",
+        title: "Order Processing ⚙️",
+        message: `Your order #${order.orderNumber} is now being processed.`
+      },
+      "Packed": {
+        type: "order_packed",
+        title: "Order Packed 📦",
+        message: `Your order #${order.orderNumber} has been packed and is ready for shipment.`
+      },
+      "Shipped": {
+        type: "order_shipped",
+        title: "Order Shipped 🚚",
+        message: `Your order #${order.orderNumber} has been shipped and is on its way.`
+      },
+      "Out for Delivery": {
+        type: "order_out_for_delivery",
+        title: "Out for Delivery 🛵",
+        message: `Your order #${order.orderNumber} is out for delivery today!`
+      },
+      "Delivered": {
+        type: "order_delivered",
+        title: "Order Delivered 🎁",
+        message: `Your order #${order.orderNumber} has been delivered successfully. Thank you for shopping with JewelsKart!`
+      },
+      "Cancelled": {
+        type: "order_cancelled",
+        title: "Order Cancelled ❌",
+        message: `Your order #${order.orderNumber} has been cancelled.`
+      },
+      "Return Requested": {
+        type: "return_submitted",
+        title: "Return Request Submitted 🔄",
+        message: `Your return request for order #${order.orderNumber} was submitted.`
+      },
+      "Return Approved": {
+        type: "return_approved",
+        title: "Return Approved ✅",
+        message: `Your return request for order #${order.orderNumber} has been approved.`
+      },
+      "Return Rejected": {
+        type: "return_rejected",
+        title: "Return Request Rejected ❌",
+        message: `Your return request for order #${order.orderNumber} was rejected.`
+      },
+      "Exchange Requested": {
+        type: "exchange_submitted",
+        title: "Exchange Request Submitted 🔄",
+        message: `Your exchange request for order #${order.orderNumber} was submitted.`
+      },
+      "Exchange Approved": {
+        type: "exchange_approved",
+        title: "Exchange Approved ✅",
+        message: `Your exchange request for order #${order.orderNumber} has been approved.`
+      },
+      "Exchange Rejected": {
+        type: "exchange_rejected",
+        title: "Exchange Request Rejected ❌",
+        message: `Your exchange request for order #${order.orderNumber} was rejected.`
+      },
+      "Return Refund Initiated": {
+        type: "refund_initiated",
+        title: "Refund Initiated 💰",
+        message: `Refund for your order #${order.orderNumber} has been initiated.`
+      },
+      "Return Refund Completed": {
+        type: "refund_completed",
+        title: "Refund Completed ✅",
+        message: `Refund for your order #${order.orderNumber} has been completed.`
+      }
+    };
+
+    const notifInfo = statusMap[status] || {
+      type: "order",
+      title: `Order Update: ${status}`,
+      message: `Your order #${order.orderNumber} status has been updated to ${status}.`
+    };
+
+    return await this.sendToCustomer(customerId, customerEmail, {
+      type: notifInfo.type,
+      title: notifInfo.title,
+      message: notifInfo.message,
+      actionLink: "/orders",
+      relatedData: { orderId: order._id }
+    });
   }
   
   async markAsRead(notificationId, adminId) {

@@ -17,17 +17,25 @@ const notificationSchema = new mongoose.Schema({
   type: { 
     type: String, 
     enum: [
-      // Customer types
+      // Customer Notification Types
       "order", "return", "refund", "exchange", "complaint",
+      "order_placed", "order_confirmed", "order_processing", "order_packed", 
+      "order_shipped", "order_out_for_delivery", "order_delivered", "order_cancelled",
+      "return_submitted", "return_approved", "return_rejected", 
+      "exchange_submitted", "exchange_approved", "exchange_rejected", 
+      "refund_initiated", "refund_completed", 
+      "payment_successful", "payment_failed_customer", 
+      "wishlist_back_in_stock", "product_back_in_stock", 
+      "password_changed", "password_reset",
+      
       // Admin - Inventory
       "out_of_stock", "low_stock", "back_in_stock",
       // Admin - Orders
-      "new_order", "order_cancelled", "order_shipped", "order_delivered",
+      "new_order",
       // Admin - Payments
       "payment_received", "payment_failed", "refund_processed",
       // Admin - Returns/Exchange
       "return_request", "exchange_request", "return_exchange_approved", "return_exchange_rejected",
-      "refund_completed",
       // Admin - Customer
       "new_customer", "customer_complaint",
       // Admin - Reviews

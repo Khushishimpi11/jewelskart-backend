@@ -142,9 +142,10 @@ if (exchangeDetails && requestType === 'exchange') {
     await Notification.create({
       userId: customer._id,
       userEmail: customer.email,
-      type: requestType === 'exchange' ? 'exchange' : 'return',
-      title: `${requestType === "cancel" ? "Cancellation" : requestType === "return" ? "Return" : "Exchange"} Request Submitted`,
+      type: requestType === 'exchange' ? 'exchange_submitted' : requestType === 'cancel' ? 'order_cancelled' : 'return_submitted',
+      title: `${requestType === "cancel" ? "Cancellation" : requestType === "return" ? "Return" : "Exchange"} Request Submitted 🔄`,
       message: `Your ${requestType} request for ${productName} has been submitted. We'll review it within 2-3 days.`,
+      actionLink: "/orders",
       isRead: false
     });
     
@@ -225,9 +226,10 @@ router.put("/admin/:id/approve", protect, adminOnly, async (req, res) => {
     await Notification.create({
       userId: returnRequest.customerId,
       userEmail: returnRequest.customerEmail,
-      type: returnRequest.requestType === 'exchange' ? 'exchange' : 'return',
-      title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Approved`,
+      type: returnRequest.requestType === 'exchange' ? 'exchange_approved' : returnRequest.requestType === 'cancel' ? 'order_cancelled' : 'return_approved',
+      title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Approved ✅`,
       message: `Your ${returnRequest.requestType} request for ${returnRequest.productName} has been approved.`,
+      actionLink: "/orders",
       isRead: false
     });
     
@@ -366,6 +368,16 @@ router.put("/admin/:id/refund-initiated", protect, adminOnly, async (req, res) =
     order.orderStatus = "Return Refund Initiated";
     await order.save();
     
+    await Notification.create({
+      userId: returnRequest.customerId,
+      userEmail: returnRequest.customerEmail,
+      type: "refund_initiated",
+      title: "Refund Initiated 💰",
+      message: `Refund of ₹${returnRequest.refundAmount} for ${returnRequest.productName} has been initiated.`,
+      actionLink: "/orders",
+      isRead: false
+    });
+
     res.json({ success: true, message: "Refund initiated" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -399,9 +411,10 @@ router.put("/admin/:id/refund-completed", protect, adminOnly, async (req, res) =
     await Notification.create({
       userId: returnRequest.customerId,
       userEmail: returnRequest.customerEmail,
-      type: "refund",
-      title: "Refund Completed",
+      type: "refund_completed",
+      title: "Refund Completed ✅",
       message: `Refund of ₹${returnRequest.refundAmount} for ${returnRequest.productName} has been completed.`,
+      actionLink: "/orders",
       isRead: false
     });
     
@@ -505,9 +518,10 @@ router.put("/admin/:id/reject", protect, adminOnly, async (req, res) => {
     await Notification.create({
       userId: returnRequest.customerId,
       userEmail: returnRequest.customerEmail,
-      type: returnRequest.requestType === 'exchange' ? 'exchange' : 'return',
-      title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Rejected`,
+      type: returnRequest.requestType === 'exchange' ? 'exchange_rejected' : 'return_rejected',
+      title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Rejected ❌`,
       message: `Your ${returnRequest.requestType} request for ${returnRequest.productName} has been rejected. Reason: ${adminNote || "Product condition not eligible"}`,
+      actionLink: "/orders",
       isRead: false
     });
     

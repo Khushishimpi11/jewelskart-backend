@@ -70,14 +70,18 @@ router.delete("/:id", protect, customerOnly, async (req, res) => {
   }
 });
 
+const User = require("../models/User");
+
 // ==================== ADMIN NOTIFICATIONS ====================
 
-// Get all admin notifications
+// Get admin notifications for Bell Dropdown (respects bellClearedAt)
 router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
   try {
     const { limit = 50, skip = 0, priority, type } = req.query;
+    const adminUser = await User.findById(req.user.id).select("bellClearedAt");
+    const bellClearedAt = adminUser?.bellClearedAt || null;
     
-    let filter = { isDismissed: { $ne: true } };
+    let filter = {};
     if (priority) filter.priority = priority;
     if (type) filter.type = type;
     
@@ -85,14 +89,45 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
       req.user.id, 
       parseInt(limit), 
       parseInt(skip),
-      filter
+      filter,
+      bellClearedAt
     );
     
-    const unreadCount = await notificationService.getAdminUnreadCount(req.user.id);
+    const unreadCount = await notificationService.getAdminUnreadCount(req.user.id, bellClearedAt);
+    const queryFilter = { adminId: req.user.id, forRole: "admin", ...filter };
+    if (bellClearedAt) {
+      queryFilter.createdAt = { $gt: bellClearedAt };
+    }
+    const totalCount = await Notification.countDocuments(queryFilter);
+    
+    res.json({ success: true, notifications, unreadCount, totalCount });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get ALL admin notifications for Notifications Page (historical record - ignores bellClearedAt)
+router.get("/admin/notifications/all", protect, adminOnly, async (req, res) => {
+  try {
+    const { limit = 100, skip = 0, priority, type } = req.query;
+    
+    let filter = {};
+    if (priority) filter.priority = priority;
+    if (type) filter.type = type;
+    
+    const notifications = await notificationService.getAdminNotifications(
+      req.user.id, 
+      parseInt(limit), 
+      parseInt(skip),
+      filter,
+      null // null = fetch ALL history
+    );
+    
+    const unreadCount = await notificationService.getAdminUnreadCount(req.user.id, null);
     const totalCount = await Notification.countDocuments({ 
       adminId: req.user.id, 
       forRole: "admin",
-      isDismissed: { $ne: true }
+      ...filter
     });
     
     res.json({ success: true, notifications, unreadCount, totalCount });
@@ -103,15 +138,11 @@ router.get("/admin/notifications", protect, adminOnly, async (req, res) => {
 
 // ✅ STATIC ROUTES FIRST (before /:id wildcards to avoid conflicts)
 
-// Clear all admin notifications (soft-clear) — must be before /:id
+// Clear bell dropdown notifications — ONLY updates bellClearedAt timestamp for the admin!
 router.delete("/admin/notifications/clear-all", protect, adminOnly, async (req, res) => {
   try {
-    // Soft-clear: mark as dismissed instead of deleting from DB
-    await Notification.updateMany(
-      { adminId: req.user.id, forRole: "admin", isDismissed: { $ne: true } },
-      { isDismissed: true }
-    );
-    res.json({ success: true, message: "All admin notifications cleared successfully" });
+    await User.findByIdAndUpdate(req.user.id, { bellClearedAt: new Date() });
+    res.json({ success: true, message: "Bell dropdown cleared successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

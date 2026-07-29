@@ -484,6 +484,17 @@ router.post("/customer/reset-password", async (req, res) => {
     customer.resetPasswordExpires = undefined;
     await customer.save();
 
+    try {
+      await notificationService.sendToCustomer(customer._id, customer.email, {
+        type: "password_reset",
+        title: "Password Reset Successfully 🔑",
+        message: "Your account password has been reset successfully. If you did not make this change, please contact support immediately.",
+        actionLink: "/login"
+      });
+    } catch (notifErr) {
+      console.error("Password reset customer notification error:", notifErr);
+    }
+
     console.log("✅ Customer password reset successful for:", email);
 
     res.status(200).json({
@@ -765,15 +776,15 @@ router.post("/change-password", protect, async (req, res) => {
 
     console.log(`✅ Password changed successfully for ${userType}: ${user.email}`);
 
-    // Send notification (optional)
+    // Send notification to customer
     if (userType === "customer") {
       try {
-        await notificationService.sendNotification(
-          user._id,
-          "Password Changed",
-          "Your password has been changed successfully. If you didn't make this change, please contact support immediately.",
-          "security"
-        );
+        await notificationService.sendToCustomer(user._id, user.email, {
+          type: "password_changed",
+          title: "Password Changed Successfully 🔐",
+          message: "Your password has been changed successfully. If you did not make this change, please contact support immediately.",
+          actionLink: "/account"
+        });
       } catch (notifError) {
         console.log("⚠️ Notification failed but password change succeeded:", notifError.message);
       }

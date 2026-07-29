@@ -25,7 +25,8 @@ const userSchema = new mongoose.Schema({
     ipAddress: { type: String, default: "" },
     lastActive: { type: Date, default: Date.now },
     loginTime: { type: Date, default: Date.now }
-  }]
+  }],
+  bellClearedAt: { type: Date, default: null }
 });
 
 // Hash password before saving (only if password is modified and exists)

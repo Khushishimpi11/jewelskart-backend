@@ -352,10 +352,18 @@ router.post("/update-payment-status", protect, async (req, res) => {
       console.error("❌ Email sending failed:", emailError.message);
     }
 
-    // Notify Admins of payment success & new order
+    // Notify Admins and Customer of payment success & new order
     try {
       await notificationService.sendNewOrder(order);
       await notificationService.sendPaymentReceived(order);
+      await notificationService.sendToCustomer(order.userId || order.customerId, order.customerEmail, {
+        type: "payment_successful",
+        title: "Payment Successful 💳",
+        message: `Payment of ₹${order.totalAmount.toLocaleString('en-IN')} for order #${order.orderNumber} was successful.`,
+        actionLink: "/orders",
+        relatedData: { orderId: order._id }
+      });
+      await notificationService.sendCustomerOrderStatusNotification(order, "Confirmed");
     } catch (notifErr) {
       console.error("Order payment confirmation notify error:", notifErr);
     }
@@ -439,8 +447,10 @@ router.put("/admin/:id/status", protect, adminOnly, async (req, res) => {
       await tracking.save();
     }
 
-    // Notify admins of status updates
+    // Notify admins and customer of status updates
     try {
+      await notificationService.sendCustomerOrderStatusNotification(order, status);
+
       if (status === "Shipped") {
         await notificationService.sendOrderShipped(order);
       } else if (status === "Delivered") {
