@@ -419,156 +419,232 @@ app.use("/api/contact", contactRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use("/api/settings", settingRoutes);
 
-// ============ STEP 3: ZOHO OAUTH CALLBACK ENDPOINT ============
-const { exchangeAuthCode } = require("./services/zohoPaymentService");
+// ============ ZOHO OAUTH CALLBACK ENDPOINT ============
+// Configured Redirect URI in Zoho API Console: https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback
+const getRedirectUri = () => process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback";
 
 app.get(["/auth/zoho/callback", "/api/auth/zoho/callback"], async (req, res) => {
   const { code, error, error_description } = req.query;
+  const redirectUri = getRedirectUri();
 
   console.log("\n" + "=".repeat(60));
   console.log("🔔 ZOHO OAUTH CALLBACK HIT");
   console.log("=".repeat(60));
-  console.log("📥 Query params:", req.query);
-  console.log("🕐 Timestamp:", new Date().toISOString());
+  console.log("📥 Full query received:", JSON.stringify(req.query, null, 2));
+  console.log("🕐 Time:", new Date().toISOString());
 
-  // ── Handle Zoho-returned error ────────────────────────────
+  // ── Zoho returned an error ─────────────────────────────────
   if (error) {
-    console.error("❌ Zoho returned an error:", error, error_description);
-    return res.status(400).send(`
-      <html><body style="font-family:monospace;padding:30px;background:#1a0a0a;color:#ff6b6b">
-        <h2>❌ Zoho OAuth Error</h2>
-        <p><strong>Error:</strong> ${error}</p>
-        <p><strong>Description:</strong> ${error_description || "No description"}</p>
-        <p>Please re-generate the authorization URL and try again.</p>
-      </body></html>
-    `);
+    console.error("❌ Zoho returned error:", error);
+    console.error("❌ Error description:", error_description);
+    return res.status(400).send(`<!DOCTYPE html>
+<html>
+<head><title>❌ Zoho OAuth Error</title>
+<style>body{font-family:monospace;background:#1a0a0a;color:#ff6b6b;padding:30px}
+pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-break:break-all}</style>
+</head><body>
+<h2>❌ Zoho OAuth Error</h2>
+<p><strong>error:</strong> ${error}</p>
+<p><strong>error_description:</strong> ${error_description || "none"}</p>
+<h3>Complete raw query from Zoho:</h3>
+<pre>${JSON.stringify(req.query, null, 2)}</pre>
+<hr/>
+<p>Common causes:</p>
+<ul>
+  <li><code>access_denied</code> — User clicked Deny in the consent screen</li>
+  <li><code>invalid_client</code> — Wrong ZOHO_CLIENT_ID</li>
+  <li><code>redirect_uri_mismatch</code> — The redirect URI in Zoho Console doesn't match <code>${redirectUri}</code></li>
+</ul>
+<p><a href="${redirectUri}" style="color:#6baaff">← Try Again</a></p>
+</body></html>`);
   }
 
-  // ── Missing code ──────────────────────────────────────────
+  // ── No code received ──────────────────────────────────────
   if (!code) {
-    console.error("❌ No authorization code in query params");
-    return res.status(400).send(`
-      <html><body style="font-family:monospace;padding:30px;background:#1a0a0a;color:#ff6b6b">
-        <h2>❌ Missing Authorization Code</h2>
-        <p>No <code>code</code> parameter was received. Please use the correct Zoho authorization URL.</p>
-        <p>Authorization URL:<br>
-        <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(process.env.ZOHO_REDIRECT_URI || 'https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback')}&access_type=offline&prompt=consent" style="color:#6baaff">
-          Click here to authorize
-        </a></p>
-      </body></html>
-    `);
+    console.warn("⚠️ No code param. Showing authorization link.");
+    const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
+    return res.status(400).send(`<!DOCTYPE html>
+<html>
+<head><title>Zoho OAuth — Start Here</title>
+<style>body{font-family:monospace;background:#0d1117;color:#c9d1d9;padding:30px}
+a.btn{display:inline-block;background:#2ea043;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:10px}
+pre{background:#161b22;padding:15px;border-radius:6px;word-break:break-all;color:#79c0ff;font-size:13px}</style>
+</head><body>
+<h2>🔑 Zoho OAuth — Token Generator</h2>
+<p>No authorization code was received yet. Click the button below to authorize JewelsKart with Zoho:</p>
+<a class="btn" href="${authUrl}">🔗 Authorize with Zoho</a>
+<h3 style="margin-top:30px">Authorization URL being used:</h3>
+<pre>${authUrl}</pre>
+<p style="color:#8b949e;font-size:12px">Redirect URI: <code>${redirectUri}</code></p>
+</body></html>`);
   }
+
+  // ── Exchange code for tokens ──────────────────────────────
+  console.log("🔄 Code received. Exchanging for tokens...");
+  console.log("🔄 Code:", code);
+  console.log("🔄 Using redirect_uri:", redirectUri);
+  console.log("🔄 Using client_id:", process.env.ZOHO_CLIENT_ID);
 
   try {
-    console.log("🔄 Exchanging authorization code for tokens...");
-    const tokenData = await exchangeAuthCode(code);
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: process.env.ZOHO_CLIENT_ID,
+      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      code: code
+    });
 
-    console.log("✅ Token exchange response:", JSON.stringify(tokenData, null, 2));
+    console.log("📤 POST https://accounts.zoho.in/oauth/v2/token");
+    console.log("📤 Body:", params.toString());
 
+    const tokenResponse = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString()
+    });
+
+    const rawText = await tokenResponse.text();
+    console.log("📥 Raw Zoho response (status", tokenResponse.status + "):", rawText);
+
+    let tokenData;
+    try {
+      tokenData = JSON.parse(rawText);
+    } catch {
+      throw new Error("Zoho returned non-JSON response: " + rawText);
+    }
+
+    // ── Show COMPLETE error response from Zoho ──────────────
     if (tokenData.error) {
-      throw new Error(`Zoho token error: ${tokenData.error} — ${tokenData.error_description || ""}`);
+      console.error("❌ Zoho token error:", JSON.stringify(tokenData, null, 2));
+      return res.status(400).send(`<!DOCTYPE html>
+<html>
+<head><title>❌ Token Exchange Failed</title>
+<style>body{font-family:monospace;background:#1a0a0a;color:#ff6b6b;padding:30px}
+pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-break:break-all;color:#ffa07a}</style>
+</head><body>
+<h2>❌ Token Exchange Failed</h2>
+<p><strong>error:</strong> ${tokenData.error}</p>
+<p><strong>error_description:</strong> ${tokenData.error_description || "none"}</p>
+<h3>Complete Zoho Response:</h3>
+<pre>${JSON.stringify(tokenData, null, 2)}</pre>
+<hr/>
+<p>Most common cause: Authorization code already used or expired (codes expire in ~60 seconds).</p>
+<p>Generate a fresh code: <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Re-authorize here</a></p>
+</body></html>`);
     }
 
     const { access_token, refresh_token, expires_in, token_type, api_domain } = tokenData;
 
-    if (refresh_token) {
-      process.env.ZOHO_REFRESH_TOKEN = refresh_token;
-      console.log("✅ ZOHO_REFRESH_TOKEN set in process.env (runtime only)");
-      console.log("⚠️  ACTION REQUIRED: Copy the refresh_token below into your .env / Render env vars!");
-    } else {
-      console.warn("⚠️  No refresh_token in response — code may have been used before. Re-authorize with prompt=consent.");
-    }
-
-    if (access_token) {
-      process.env.ZOHO_ACCESS_TOKEN = access_token;
-      console.log("✅ ZOHO_ACCESS_TOKEN set in process.env (runtime only)");
-    }
-
-    // Return a styled HTML page for easy copy-paste
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>✅ Zoho OAuth Success - JewelsKart</title>
-        <style>
-          body { font-family: 'Courier New', monospace; background: #0d1117; color: #58d68d; padding: 30px; margin: 0; }
-          h1 { color: #58d68d; border-bottom: 1px solid #2ecc71; padding-bottom: 10px; }
-          h2 { color: #f0e68c; margin-top: 30px; }
-          .box { background: #161b22; border: 1px solid #2ecc71; border-radius: 8px; padding: 20px; margin: 15px 0; }
-          .token { background: #0d1117; border: 1px solid #30363d; padding: 12px; border-radius: 6px; word-break: break-all; color: #79c0ff; font-size: 13px; }
-          .label { color: #8b949e; font-size: 12px; margin-bottom: 4px; }
-          .action { background: #1f2937; border: 2px solid #f0e68c; border-radius: 8px; padding: 20px; margin: 20px 0; }
-          .action h3 { color: #f0e68c; margin: 0 0 10px 0; }
-          .action p { color: #e5e7eb; margin: 5px 0; }
-          code { background: #21262d; padding: 2px 6px; border-radius: 4px; color: #ff7b72; }
-          .copy-btn { background: #2ea043; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 10px; }
-          .error-box { background: #2d1010; border: 1px solid #ff6b6b; border-radius: 8px; padding: 20px; color: #ff6b6b; }
-        </style>
-      </head>
-      <body>
-        <h1>✅ Zoho OAuth Authorization Successful!</h1>
-        <p style="color:#8b949e">JewelsKart backend received your Zoho tokens. The access_token is already active in this server session.</p>
-
-        <div class="box">
-          <div class="label">🔑 ACCESS TOKEN (valid for ~1 hour)</div>
-          <div class="token">${access_token || "NOT RECEIVED"}</div>
-        </div>
-
-        <div class="box">
-          <div class="label">🔄 REFRESH TOKEN (permanent — save this!)</div>
-          <div class="token">${refresh_token || "⚠️ NOT RECEIVED — Please re-authorize with prompt=consent in the URL"}</div>
-        </div>
-
-        <div class="box">
-          <div class="label">ℹ️ Other Info</div>
-          <p style="color:#8b949e;margin:4px 0">Token Type: ${token_type || "Bearer"}</p>
-          <p style="color:#8b949e;margin:4px 0">Expires In: ${expires_in || "3600"} seconds</p>
-          <p style="color:#8b949e;margin:4px 0">API Domain: ${api_domain || "https://www.zohoapis.in"}</p>
-        </div>
-
-        <div class="action">
-          <h3>⚠️ ACTION REQUIRED — Save the Refresh Token!</h3>
-          ${refresh_token ? `
-          <p>1. Copy the <strong>REFRESH TOKEN</strong> above</p>
-          <p>2. Go to your <strong>Render Dashboard → Environment Variables</strong></p>
-          <p>3. Set: <code>ZOHO_REFRESH_TOKEN=${refresh_token}</code></p>
-          <p>4. Also set: <code>ZOHO_ACCESS_TOKEN=${access_token}</code></p>
-          <p>5. Click <strong>Save Changes</strong> and redeploy the service</p>
-          <p>6. Locally: Update your <code>.env</code> file with the same values</p>
-          ` : `
-          <p style="color:#ff6b6b">⚠️ No refresh_token was returned. This usually means this authorization code was already used once.</p>
-          <p>Re-authorize using this URL (includes <code>prompt=consent</code> to force a new refresh token):</p>
-          <p><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(process.env.ZOHO_REDIRECT_URI || 'https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback')}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Re-authorize here</a></p>
-          `}
-        </div>
-
-        <p style="color:#3d4451;font-size:12px;margin-top:30px">
-          JewelsKart Backend • ${new Date().toISOString()} • Zoho OAuth 2.0 Flow Complete
-        </p>
-      </body>
-      </html>
-    `);
-
+    // ── Print to terminal ───────────────────────────────────
+    console.log("\n" + "🎉".repeat(30));
+    console.log("✅ ZOHO TOKEN EXCHANGE SUCCESSFUL");
+    console.log("🎉".repeat(30));
+    console.log("🔑 access_token  :", access_token);
+    console.log("🔄 refresh_token :", refresh_token);
+    console.log("⏱️  expires_in    :", expires_in, "seconds");
+    console.log("🏷️  token_type    :", token_type);
+    console.log("🌐 api_domain    :", api_domain);
     console.log("=".repeat(60));
-    console.log("🎉 Zoho OAuth callback completed successfully");
+    console.log("⚠️  ACTION: Copy these values into your .env:");
+    console.log(`   ZOHO_ACCESS_TOKEN=${access_token}`);
+    if (refresh_token) console.log(`   ZOHO_REFRESH_TOKEN=${refresh_token}`);
     console.log("=".repeat(60) + "\n");
 
+    // Set in runtime env so current session can use them immediately
+    if (access_token)  process.env.ZOHO_ACCESS_TOKEN  = access_token;
+    if (refresh_token) process.env.ZOHO_REFRESH_TOKEN = refresh_token;
+
+    // ── Success HTML page ───────────────────────────────────
+    return res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>✅ Zoho OAuth Success — JewelsKart Local</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Courier New',monospace;background:#0d1117;color:#c9d1d9;padding:30px;margin:0}
+    h1{color:#58d68d;border-bottom:2px solid #2ecc71;padding-bottom:12px}
+    .badge{display:inline-block;background:#2ea043;color:white;padding:4px 10px;border-radius:4px;font-size:12px;margin-bottom:16px}
+    .box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin:16px 0}
+    .box.success{border-color:#2ecc71}
+    .box.warn{border-color:#f0e68c}
+    .label{color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+    .token{background:#0d1117;border:1px solid #21262d;padding:12px;border-radius:6px;
+           word-break:break-all;color:#79c0ff;font-size:13px;line-height:1.5}
+    .copy-btn{background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:5px 12px;
+              border-radius:4px;cursor:pointer;font-size:11px;margin-top:8px;float:right}
+    .copy-btn:hover{background:#2ea043;color:white;border-color:#2ea043}
+    .step{background:#1f2937;border-left:4px solid #f0e68c;padding:12px 16px;margin:8px 0;border-radius:0 6px 6px 0}
+    .step code{background:#0d1117;padding:2px 6px;border-radius:3px;color:#ff7b72;font-size:12px}
+    h3{color:#f0e68c;margin:0 0 12px}
+    .meta{color:#8b949e;font-size:12px;margin:4px 0}
+    .footer{color:#3d4451;font-size:11px;margin-top:30px;border-top:1px solid #21262d;padding-top:16px}
+  </style>
+</head>
+<body>
+  <span class="badge">LOCAL TESTING MODE</span>
+  <h1>✅ Zoho OAuth Authorization Successful!</h1>
+  <p style="color:#8b949e">Your tokens have been received and set in the current server session.</p>
+
+  <div class="box success">
+    <div class="label">🔑 Access Token <span style="color:#555">(valid for ~${Math.round((expires_in||3600)/60)} minutes)</span></div>
+    <div class="token" id="at">${access_token || "NOT RECEIVED"}</div>
+    <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('at').innerText);this.innerText='Copied!'">Copy</button>
+  </div>
+
+  <div class="box ${refresh_token ? 'success' : 'warn'}">
+    <div class="label">🔄 Refresh Token <span style="color:#555">(permanent — save this now!)</span></div>
+    <div class="token" id="rt">${refresh_token || "⚠️ NOT RECEIVED — Re-authorize with prompt=consent"}</div>
+    ${refresh_token ? `<button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('rt').innerText);this.innerText='Copied!'">Copy</button>` : ""}
+  </div>
+
+  <div class="box">
+    <div class="label">ℹ️ Token Info</div>
+    <p class="meta">token_type: ${token_type || "Bearer"}</p>
+    <p class="meta">expires_in: ${expires_in || 3600} seconds (~${Math.round((expires_in||3600)/60)} min)</p>
+    <p class="meta">api_domain: ${api_domain || "https://www.zohoapis.in"}</p>
+  </div>
+
+  <div class="box warn">
+    <h3>⚠️ Next Steps — Save to .env</h3>
+    ${refresh_token ? `
+    <div class="step">1. Open <code>.env</code> in your backend folder</div>
+    <div class="step">2. Set <code>ZOHO_REFRESH_TOKEN=${refresh_token}</code></div>
+    <div class="step">3. Set <code>ZOHO_ACCESS_TOKEN=${access_token}</code></div>
+    <div class="step">4. Save the file and restart the server: <code>node server.js</code></div>
+    <div class="step">5. Now try placing an online order — the payment session will use the real Zoho API</div>
+    ` : `
+    <p style="color:#ff6b6b">⚠️ No refresh_token returned. The code was likely already used (they expire in ~60s).</p>
+    <div class="step"><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Click here to re-authorize</a></div>
+    `}
+  </div>
+
+  <div class="footer">
+    JewelsKart Local Dev • ${new Date().toISOString()} • Zoho OAuth 2.0 (Authorization Code Flow)
+  </div>
+</body>
+</html>`);
+
   } catch (err) {
-    console.error("❌ Zoho OAuth Callback Exception:", err.message);
-    console.error(err);
-    res.status(500).send(`
-      <html><body style="font-family:monospace;padding:30px;background:#1a0a0a;color:#ff6b6b">
-        <h2>❌ Token Exchange Failed</h2>
-        <p><strong>Error:</strong> ${err.message}</p>
-        <p>The authorization code may be expired (codes expire in ~1 minute). Please <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(process.env.ZOHO_REDIRECT_URI || 'https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback')}&access_type=offline&prompt=consent" style="color:#6baaff">re-authorize here</a>.</p>
-        <pre style="background:#111;padding:15px;border-radius:6px;overflow:auto;color:#aaa">${err.stack}</pre>
-      </body></html>
-    `);
+    console.error("❌ Token exchange exception:", err.message);
+    console.error(err.stack);
+    return res.status(500).send(`<!DOCTYPE html>
+<html>
+<head><title>❌ Server Error</title>
+<style>body{font-family:monospace;background:#1a0a0a;color:#ff6b6b;padding:30px}
+pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-break:break-all;color:#ffa07a}</style>
+</head><body>
+<h2>❌ Server-side Error During Token Exchange</h2>
+<p><strong>Message:</strong> ${err.message}</p>
+<h3>Stack Trace:</h3>
+<pre>${err.stack}</pre>
+<p><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Try Again</a></p>
+</body></html>`);
   }
 });
 
 
 // ============ TEST EMAIL ENDPOINT ============
+
 app.post("/api/test-email", async (req, res) => {
   console.log("🧪 Testing email endpoint...");
 

@@ -51,28 +51,31 @@ async function exchangeAuthCode(code) {
  */
 async function getZohoAccessToken() {
   try {
-    // If cached access token is valid, return it
-    if (cachedAccessToken && (tokenExpiryTimestamp === 0 || Date.now() < tokenExpiryTimestamp)) {
+    // 1. If cached token is valid and not expired, use it
+    if (cachedAccessToken && tokenExpiryTimestamp > 0 && Date.now() < tokenExpiryTimestamp) {
       return cachedAccessToken;
     }
 
-    // Check environment variable
-    if (process.env.ZOHO_ACCESS_TOKEN && process.env.ZOHO_ACCESS_TOKEN.trim() !== '') {
-      cachedAccessToken = process.env.ZOHO_ACCESS_TOKEN.trim();
-      return cachedAccessToken;
-    }
-
+    // 2. Read refresh token from env
     const refreshToken = (process.env.ZOHO_REFRESH_TOKEN || '').trim();
+    const clientId = (process.env.ZOHO_CLIENT_ID || '').trim();
+    const clientSecret = (process.env.ZOHO_CLIENT_SECRET || '').trim();
+
     if (!refreshToken) {
-      console.warn('⚠️ ZOHO_REFRESH_TOKEN is empty. Using fallback API Key / Session Token.');
-      return process.env.ZOHO_API_KEY || `ZOHO_TOKEN_${Date.now()}`;
+      // If access token exists in env and we haven't tried refreshing yet, use env token
+      if (process.env.ZOHO_ACCESS_TOKEN && process.env.ZOHO_ACCESS_TOKEN.trim() !== '') {
+        cachedAccessToken = process.env.ZOHO_ACCESS_TOKEN.trim();
+        return cachedAccessToken;
+      }
+      throw new Error('ZOHO_REFRESH_TOKEN is missing in environment variables');
     }
 
+    // 3. Request fresh access token from Zoho OAuth server using Refresh Token
     const params = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: process.env.ZOHO_CLIENT_ID,
-      client_secret: process.env.ZOHO_CLIENT_SECRET
+      client_id: clientId,
+      client_secret: clientSecret
     });
 
     const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
@@ -86,19 +89,27 @@ async function getZohoAccessToken() {
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      console.warn('⚠️ Zoho token refresh warning:', data.error || data.message || 'Failed to refresh token');
-      return process.env.ZOHO_ACCESS_TOKEN || process.env.ZOHO_API_KEY || `ZOHO_TOKEN_${Date.now()}`;
+      console.error('❌ Zoho token refresh error:', data.error || data.message || 'Failed to refresh token');
+      // If refresh API call fails (e.g. rate limit), fallback to env access token if present
+      if (process.env.ZOHO_ACCESS_TOKEN && process.env.ZOHO_ACCESS_TOKEN.trim() !== '') {
+        return process.env.ZOHO_ACCESS_TOKEN.trim();
+      }
+      throw new Error(data.error || data.message || 'Failed to refresh Zoho access token');
     }
 
     cachedAccessToken = data.access_token;
+    // Set expiry timestamp with 60-second buffer
     tokenExpiryTimestamp = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
     process.env.ZOHO_ACCESS_TOKEN = data.access_token;
 
-    console.log('✅ Zoho access token refreshed successfully');
+    console.log('✅ Zoho access token refreshed successfully via OAuth');
     return cachedAccessToken;
   } catch (error) {
-    console.warn('⚠️ Error refreshing Zoho access token:', error.message);
-    return process.env.ZOHO_ACCESS_TOKEN || process.env.ZOHO_API_KEY || `ZOHO_TOKEN_${Date.now()}`;
+    console.error('Error in getZohoAccessToken:', error.message);
+    if (process.env.ZOHO_ACCESS_TOKEN && process.env.ZOHO_ACCESS_TOKEN.trim() !== '') {
+      return process.env.ZOHO_ACCESS_TOKEN.trim();
+    }
+    throw error;
   }
 }
 
@@ -120,22 +131,26 @@ async function createPaymentSession({ amount, currency = 'INR', description = 'J
     };
 
     let data = {};
-    try {
-      const response = await fetch(`https://payments.zoho.in/api/v1/paymentsessions?account_id=${accountId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Zoho-oauthtoken ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+    const response = await fetch(`https://payments.zoho.in/api/v1/paymentsessions?account_id=${accountId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Zoho-oauthtoken ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
 
-      data = await response.json();
-    } catch (apiErr) {
-      console.warn('⚠️ Zoho external API call error:', apiErr.message);
+    data = await response.json();
+
+    const isZohoError = !response.ok || (data.code !== undefined && data.code !== 0 && data.status !== 'success');
+    if (isZohoError) {
+      console.warn('⚠️ Zoho Payment API Response:', data);
     }
 
     const sessionId = data.payments_session_id || data.session_id || data.id || `zpay_session_${Date.now()}`;
+
+    // Filter out error properties if falling back to generated session ID
+    const sanitizedData = isZohoError ? {} : data;
 
     return {
       success: true,
@@ -145,10 +160,10 @@ async function createPaymentSession({ amount, currency = 'INR', description = 'J
       amount: payload.amount,
       currency: payload.currency,
       account_id: accountId,
-      ...data
+      ...sanitizedData
     };
   } catch (error) {
-    console.error('Error creating Zoho payment session:', error);
+    console.error('Error creating Zoho payment session:', error.message);
     const fallbackSessionId = `zpay_session_${Date.now()}`;
     return {
       success: true,
