@@ -1038,6 +1038,10 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running", timestamp: new Date().toISOString() });
 });
 
+app.get("/api/version", (req, res) => {
+  res.json({ version: "285d71a", build: "2026-08-04T13:12Z", routes: ["/auth/zoho/callback", "/api/auth/zoho/callback", "/api/payment/zoho/callback"] });
+});
+
 // ============ 404 HANDLER ============
 app.use((req, res) => {
   console.log(`❌ Route not found: ${req.method} ${req.url}`);
