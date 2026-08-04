@@ -432,11 +432,13 @@ app.use("/api/settings", settingRoutes);
 
 // ============ ZOHO OAUTH CALLBACK ENDPOINT ============
 // Configured Redirect URI in Zoho API Console: https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback
-const getRedirectUri = () => process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback";
+const getRedirectUri = () => (process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback").trim();
 
 const handleZohoOAuthCallback = async (req, res) => {
   const { code, error, error_description } = req.query;
   const redirectUri = getRedirectUri();
+  const clientId = (process.env.ZOHO_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.ZOHO_CLIENT_SECRET || "").trim();
 
   console.log("\n" + "=".repeat(60));
   console.log("🔔 ZOHO OAUTH CALLBACK HIT");
@@ -463,7 +465,7 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
 <p>Common causes:</p>
 <ul>
   <li><code>access_denied</code> — User clicked Deny in the consent screen</li>
-  <li><code>invalid_client</code> — Wrong ZOHO_CLIENT_ID</li>
+  <li><code>invalid_client</code> — Wrong ZOHO_CLIENT_ID or ZOHO_CLIENT_SECRET in environment</li>
   <li><code>redirect_uri_mismatch</code> — The redirect URI in Zoho Console doesn't match <code>${redirectUri}</code></li>
 </ul>
 <p><a href="${redirectUri}" style="color:#6baaff">← Try Again</a></p>
@@ -473,7 +475,7 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
   // ── No code received ──────────────────────────────────────
   if (!code) {
     console.warn("⚠️ No code param. Showing authorization link.");
-    const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
+    const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${clientId}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
     return res.status(400).send(`<!DOCTYPE html>
 <html>
 <head><title>Zoho OAuth — Start Here</title>
@@ -492,30 +494,33 @@ pre{background:#161b22;padding:15px;border-radius:6px;word-break:break-all;color
 
   // ── Exchange code for tokens ──────────────────────────────
   console.log("🔄 Code received. Exchanging for tokens...");
-  console.log("🔄 Code:", code);
-  console.log("🔄 Using redirect_uri:", redirectUri);
-  console.log("🔄 Using client_id:", process.env.ZOHO_CLIENT_ID);
+  console.log("📤 Token Exchange Payload Keys & Values:");
+  console.log("   - grant_type   : 'authorization_code'");
+  console.log("   - client_id    :", clientId);
+  console.log("   - client_secret:", clientSecret ? `${clientSecret.slice(0, 4)}...${clientSecret.slice(-4)}` : "❌ MISSING");
+  console.log("   - redirect_uri :", redirectUri);
+  console.log("   - code         :", code ? `${code.slice(0, 10)}...` : "❌ MISSING");
 
   try {
     const params = new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: process.env.ZOHO_CLIENT_ID,
-      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       redirect_uri: redirectUri,
-      code: code
+      code: code.trim()
     });
 
-    console.log("📤 POST https://accounts.zoho.in/oauth/v2/token");
-    console.log("📤 Body:", params.toString());
+    let tokenEndpoint = "https://accounts.zoho.in/oauth/v2/token";
+    console.log("📤 Requesting POST", tokenEndpoint);
 
-    const tokenResponse = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+    let tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString()
     });
 
-    const rawText = await tokenResponse.text();
-    console.log("📥 Raw Zoho response (status", tokenResponse.status + "):", rawText);
+    let rawText = await tokenResponse.text();
+    console.log("📥 Zoho Accounts response (status", tokenResponse.status + "):", rawText);
 
     let tokenData;
     try {
@@ -524,9 +529,42 @@ pre{background:#161b22;padding:15px;border-radius:6px;word-break:break-all;color
       throw new Error("Zoho returned non-JSON response: " + rawText);
     }
 
+    // ── Fallback attempt for global domain accounts.zoho.com if invalid_client ──
+    if (tokenData.error === "invalid_client") {
+      console.warn("⚠️  Received invalid_client from accounts.zoho.in. Attempting fallback to accounts.zoho.com...");
+      tokenEndpoint = "https://accounts.zoho.com/oauth/v2/token";
+      const fallbackResp = await fetch(tokenEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+      });
+      const fallbackText = await fallbackResp.text();
+      try {
+        const fallbackData = JSON.parse(fallbackText);
+        if (fallbackData.access_token) {
+          console.log("✅ Fallback to accounts.zoho.com succeeded!");
+          tokenData = fallbackData;
+        } else {
+          console.error("📥 Fallback accounts.zoho.com response:", fallbackText);
+        }
+      } catch {
+        // ignore fallback parse error
+      }
+    }
+
     // ── Show COMPLETE error response from Zoho ──────────────
     if (tokenData.error) {
       console.error("❌ Zoho token error:", JSON.stringify(tokenData, null, 2));
+      const isInvalidClient = tokenData.error === "invalid_client";
+      const debugHtml = isInvalidClient ? `
+<div style="background:#2b1d0c;border:1px solid #f0e68c;padding:15px;border-radius:6px;color:#f0e68c">
+  <h3>🔍 Debugging invalid_client:</h3>
+  <p>1. <strong>ZOHO_CLIENT_ID:</strong> <code>${clientId}</code></p>
+  <p>2. <strong>ZOHO_CLIENT_SECRET:</strong> <code>${clientSecret ? clientSecret.slice(0, 4) + '...' + clientSecret.slice(-4) : 'MISSING'}</code></p>
+  <p>3. <strong>redirect_uri:</strong> <code>${redirectUri}</code></p>
+  <p>Make sure ZOHO_CLIENT_ID and ZOHO_CLIENT_SECRET match your registered Client in <a href="https://api-console.zoho.in/" target="_blank" style="color:#6baaff">Zoho API Console</a>, and the Client Type is <strong>Server-based Applications</strong>.</p>
+</div>` : `<p>Most common cause: Authorization code already used or expired (codes expire in ~60 seconds).</p>`;
+
       return res.status(400).send(`<!DOCTYPE html>
 <html>
 <head><title>❌ Token Exchange Failed</title>
@@ -539,8 +577,8 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
 <h3>Complete Zoho Response:</h3>
 <pre>${JSON.stringify(tokenData, null, 2)}</pre>
 <hr/>
-<p>Most common cause: Authorization code already used or expired (codes expire in ~60 seconds).</p>
-<p>Generate a fresh code: <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Re-authorize here</a></p>
+${debugHtml}
+<p><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${clientId}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Click here to generate a fresh authorization code</a></p>
 </body></html>`);
     }
 
