@@ -423,7 +423,7 @@ app.use("/api/settings", settingRoutes);
 // Configured Redirect URI in Zoho API Console: https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback
 const getRedirectUri = () => process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback";
 
-app.get(["/auth/zoho/callback", "/api/auth/zoho/callback"], async (req, res) => {
+const handleZohoOAuthCallback = async (req, res) => {
   const { code, error, error_description } = req.query;
   const redirectUri = getRedirectUri();
 
@@ -529,7 +529,7 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
 <pre>${JSON.stringify(tokenData, null, 2)}</pre>
 <hr/>
 <p>Most common cause: Authorization code already used or expired (codes expire in ~60 seconds).</p>
-<p>Generate a fresh code: <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Re-authorize here</a></p>
+<p>Generate a fresh code: <a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Re-authorize here</a></p>
 </body></html>`);
     }
 
@@ -545,7 +545,7 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
     console.log("🏷️  token_type    :", token_type);
     console.log("🌐 api_domain    :", api_domain);
     console.log("=".repeat(60));
-    console.log("⚠️  ACTION: Copy these values into your .env:");
+    console.log("⚠️  ACTION: Copy these values into your .env / Render env vars:");
     console.log(`   ZOHO_ACCESS_TOKEN=${access_token}`);
     if (refresh_token) console.log(`   ZOHO_REFRESH_TOKEN=${refresh_token}`);
     console.log("=".repeat(60) + "\n");
@@ -558,7 +558,7 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
     return res.send(`<!DOCTYPE html>
 <html>
 <head>
-  <title>✅ Zoho OAuth Success — JewelsKart Local</title>
+  <title>✅ Zoho OAuth Success — JewelsKart</title>
   <style>
     *{box-sizing:border-box}
     body{font-family:'Courier New',monospace;background:#0d1117;color:#c9d1d9;padding:30px;margin:0}
@@ -581,9 +581,9 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
   </style>
 </head>
 <body>
-  <span class="badge">LOCAL TESTING MODE</span>
+  <span class="badge">ZOHO OAUTH SUCCESS</span>
   <h1>✅ Zoho OAuth Authorization Successful!</h1>
-  <p style="color:#8b949e">Your tokens have been received and set in the current server session.</p>
+  <p style="color:#8b949e">Your tokens have been received and set in the server environment.</p>
 
   <div class="box success">
     <div class="label">🔑 Access Token <span style="color:#555">(valid for ~${Math.round((expires_in||3600)/60)} minutes)</span></div>
@@ -605,21 +605,21 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
   </div>
 
   <div class="box warn">
-    <h3>⚠️ Next Steps — Save to .env</h3>
+    <h3>⚠️ Next Steps — Save to Render Environment Variables</h3>
     ${refresh_token ? `
-    <div class="step">1. Open <code>.env</code> in your backend folder</div>
-    <div class="step">2. Set <code>ZOHO_REFRESH_TOKEN=${refresh_token}</code></div>
-    <div class="step">3. Set <code>ZOHO_ACCESS_TOKEN=${access_token}</code></div>
-    <div class="step">4. Save the file and restart the server: <code>node server.js</code></div>
-    <div class="step">5. Now try placing an online order — the payment session will use the real Zoho API</div>
+    <div class="step">1. Copy the <code>ZOHO_REFRESH_TOKEN</code> and <code>ZOHO_ACCESS_TOKEN</code> above</div>
+    <div class="step">2. Open your Render Dashboard → Environment Variables</div>
+    <div class="step">3. Add/Update <code>ZOHO_REFRESH_TOKEN=${refresh_token}</code></div>
+    <div class="step">4. Add/Update <code>ZOHO_ACCESS_TOKEN=${access_token}</code></div>
+    <div class="step">5. Click Save Changes</div>
     ` : `
-    <p style="color:#ff6b6b">⚠️ No refresh_token returned. The code was likely already used (they expire in ~60s).</p>
-    <div class="step"><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Click here to re-authorize</a></div>
+    <p style="color:#ff6b6b">⚠️ No refresh_token returned. The code was likely already used.</p>
+    <div class="step"><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Click here to re-authorize</a></div>
     `}
   </div>
 
   <div class="footer">
-    JewelsKart Local Dev • ${new Date().toISOString()} • Zoho OAuth 2.0 (Authorization Code Flow)
+    JewelsKart • ${new Date().toISOString()} • Zoho OAuth 2.0 (Authorization Code Flow)
   </div>
 </body>
 </html>`);
@@ -637,10 +637,16 @@ pre{background:#111;padding:15px;border-radius:6px;white-space:pre-wrap;word-bre
 <p><strong>Message:</strong> ${err.message}</p>
 <h3>Stack Trace:</h3>
 <pre>${err.stack}</pre>
-<p><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(LOCAL_REDIRECT_URI)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Try Again</a></p>
+<p><a href="https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent" style="color:#6baaff">🔗 Try Again</a></p>
 </body></html>`);
   }
-});
+};
+
+// Mount explicit callback routes
+app.get("/auth/zoho/callback", handleZohoOAuthCallback);
+app.get("/api/auth/zoho/callback", handleZohoOAuthCallback);
+app.get("/api/payment/zoho/callback", handleZohoOAuthCallback);
+
 
 
 // ============ TEST EMAIL ENDPOINT ============

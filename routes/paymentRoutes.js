@@ -9,6 +9,57 @@ const notificationService = require('../services/notificationService');
 // Track processed webhook event IDs to prevent duplicate processing
 const processedWebhookEvents = new Set();
 
+// ========== ZOHO OAUTH CALLBACK ENDPOINT ==========
+router.get('/zoho/callback', async (req, res) => {
+    const { code, error, error_description } = req.query;
+    const redirectUri = process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback";
+
+    if (error) {
+        return res.status(400).send(`<h2>❌ Zoho OAuth Error</h2><p>${error}: ${error_description || ''}</p>`);
+    }
+
+    if (!code) {
+        const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
+        return res.status(400).send(`<h2>🔑 Zoho OAuth Callback</h2><p><a href="${authUrl}">Authorize with Zoho</a></p>`);
+    }
+
+    try {
+        const params = new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: process.env.ZOHO_CLIENT_ID,
+            client_secret: process.env.ZOHO_CLIENT_SECRET,
+            redirect_uri: redirectUri,
+            code
+        });
+
+        const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        });
+
+        const data = await response.json();
+
+        if (data.access_token) {
+            process.env.ZOHO_ACCESS_TOKEN = data.access_token;
+            if (data.refresh_token) process.env.ZOHO_REFRESH_TOKEN = data.refresh_token;
+        }
+
+        res.json({
+            success: !data.error,
+            message: data.error ? data.error_description || data.error : 'Zoho OAuth callback processed successfully',
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            expires_in: data.expires_in,
+            token_type: data.token_type,
+            api_domain: data.api_domain,
+            ...data
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ========== STEP 5: CREATE ZOHO PAYMENT SESSION ==========
 router.post('/create-session', protect, async (req, res) => {
     try {
