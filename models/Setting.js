@@ -11,9 +11,9 @@ const settingSchema = new mongoose.Schema({
   storeAddress: { type: String, default: "123 Zaveri Bazaar, Mumbai, Maharashtra 400002" },
 
   // Payment Gateway
-  razorpayEnabled: { type: Boolean, default: true },
-  razorpayKeyId: { type: String, default: "rzp_test_key" },
-  razorpayKeySecret: { type: String, default: "rzp_test_secret" },
+  zohoPaymentsEnabled: { type: Boolean, default: true },
+  zohoAccountId: { type: String, default: "23137556" },
+  zohoApiKey: { type: String, default: "" },
   codEnabled: { type: Boolean, default: true },
 
   // Company Details

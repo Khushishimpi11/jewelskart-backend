@@ -1,17 +1,17 @@
 const nodemailer = require("nodemailer");
 
+const emailUser = (process.env.EMAIL_USER || "jewelskartindia16@gmail.com").trim();
+const emailPass = (process.env.EMAIL_PASS || "").replace(/\s+/g, "");
+
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.EMAIL_PORT) || 465,
-  secure: process.env.EMAIL_PORT === "587" ? false : true,
+  service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER || "jewelskartindia16@gmail.com",
-    pass: process.env.EMAIL_PASS || "leud gwxk fxjz pedg",
+    user: emailUser,
+    pass: emailPass,
   },
-  // Fast fail timeouts to prevent long UI delays
-  connectionTimeout: 5000,  // 5 seconds to connect
-  greetingTimeout: 5000,    // 5 seconds for greeting
-  socketTimeout: 10000,     // 10 seconds per socket operation
+  connectionTimeout: 10000,  // 10 seconds to connect
+  greetingTimeout: 10000,    // 10 seconds for greeting
+  socketTimeout: 15000,     // 15 seconds per socket operation
 });
 
 // Cloudinary Logo URL

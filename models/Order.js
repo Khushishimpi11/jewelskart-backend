@@ -93,9 +93,10 @@ const orderSchema = new mongoose.Schema({
   courierPartner: { type: String, default: "" },
   awbNumber: { type: String, default: "" },
 
-  // Payment tracking fields for Razorpay
+  // Payment tracking fields for Zoho Payments
   paymentId: { type: String, default: "" },
-  razorpayOrderId: { type: String, default: "" },
+  zohoSessionId: { type: String, default: "" },
+  zohoPaymentId: { type: String, default: "" },
   paymentDate: { type: Date },
   refundId: { type: String, default: "" },
   refundAmount: { type: Number, default: 0 },

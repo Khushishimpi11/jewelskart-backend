@@ -5,15 +5,9 @@ const Product = require("../models/Product");
 const Tracking = require("../models/Tracking");
 const Customer = require("../models/Customer");
 const { protect, adminOnly, customerOnly } = require("../middleware/auth");
-const Razorpay = require("razorpay");
+const { createPaymentSession, verifyZohoSignature } = require("../services/zohoPaymentService");
 const { sendOrderConfirmationEmail } = require("../services/emailService");
 const notificationService = require("../services/notificationService");
-
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
 
 // Helper: Map order status to tracking status
 function mapOrderStatusToTracking(orderStatus) {
@@ -227,25 +221,27 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       }
     }
 
-    // If payment method is online, create Razorpay order
-    let razorpayOrder = null;
+    // If payment method is online, create Zoho Payment session
+    let zohoSession = null;
     if (paymentMethod !== "COD") {
-      razorpayOrder = await razorpay.orders.create({
-        amount: totalAmount * 100,
-        currency: 'INR',
-        receipt: `order_${order.orderNumber}`,
-        payment_capture: 1,
-        notes: {
-          orderId: order._id.toString(),
-          orderNumber: order.orderNumber,
-          customerEmail: customer.email
+      try {
+        zohoSession = await createPaymentSession({
+          amount: totalAmount,
+          currency: 'INR',
+          description: `JewelsKart Order #${order.orderNumber}`,
+          reference_number: order._id.toString(),
+          invoice_number: `INV-${order.orderNumber}`
+        });
+
+        const sessionId = zohoSession.payments_session_id || zohoSession.session_id || zohoSession.id;
+        if (sessionId) {
+          order.zohoSessionId = sessionId;
+          await order.save();
+          console.log(`✅ Zoho Payment Session created: ${sessionId} for order ${order.orderNumber}`);
         }
-      });
-
-      order.razorpayOrderId = razorpayOrder.id;
-      await order.save();
-
-      console.log(`✅ Razorpay order created: ${razorpayOrder.id} for order ${order.orderNumber}`);
+      } catch (zErr) {
+        console.error("Zoho payment session error:", zErr.message);
+      }
     }
 
     res.status(201).json({
@@ -253,11 +249,11 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       message: paymentMethod === "COD" ? "Order confirmed successfully" : "Order created. Please complete payment.",
       order,
       tracking,
-      razorpayOrder: razorpayOrder ? {
-        id: razorpayOrder.id,
-        amount: razorpayOrder.amount,
-        currency: razorpayOrder.currency,
-        key_id: process.env.RAZORPAY_KEY_ID
+      zohoSession: zohoSession ? {
+        payments_session_id: zohoSession.payments_session_id || zohoSession.session_id || zohoSession.id,
+        amount: totalAmount,
+        currency: 'INR',
+        account_id: process.env.ZOHO_ACCOUNT_ID
       } : null
     });
 
@@ -270,21 +266,31 @@ router.post("/create", protect, customerOnly, async (req, res) => {
 // ============ UPDATE PAYMENT STATUS AFTER SUCCESS ============
 router.post("/update-payment-status", protect, async (req, res) => {
   try {
-    const { orderId, paymentId, razorpayOrderId, signature } = req.body;
+    const { orderId, paymentId, payments_session_id, zohoSessionId, signature } = req.body;
 
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    const crypto = require('crypto');
-    const body = razorpayOrderId + "|" + paymentId;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest('hex');
+    const signingKey = process.env.ZOHO_SIGNING_KEY;
+    let isValidSignature = true;
+    const activeSessionId = payments_session_id || zohoSessionId || order.zohoSessionId;
 
-    if (expectedSignature !== signature) {
+    if (signingKey && signature) {
+      const crypto = require('crypto');
+      const body = activeSessionId ? activeSessionId + "|" + paymentId : paymentId;
+      const expectedSignature = crypto
+        .createHmac('sha256', signingKey)
+        .update(body.toString())
+        .digest('hex');
+
+      if (expectedSignature !== signature) {
+        isValidSignature = verifyZohoSignature(req.body, signature);
+      }
+    }
+
+    if (!isValidSignature) {
       try {
         await notificationService.sendPaymentFailed(order);
       } catch (notifErr) {
@@ -294,8 +300,8 @@ router.post("/update-payment-status", protect, async (req, res) => {
     }
 
     order.paymentStatus = "SUCCESS";
-    order.paymentId = paymentId;
-    order.razorpayOrderId = razorpayOrderId;
+    order.paymentId = paymentId || order.paymentId;
+    if (activeSessionId) order.zohoSessionId = activeSessionId;
     order.orderStatus = "Confirmed";
     order.paymentDate = new Date();
     order.statusHistory.push({
