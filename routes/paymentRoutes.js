@@ -12,24 +12,39 @@ const processedWebhookEvents = new Set();
 // ========== ZOHO OAUTH CALLBACK ENDPOINT ==========
 router.get('/zoho/callback', async (req, res) => {
     const { code, error, error_description } = req.query;
-    const redirectUri = process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback";
+    const clientId = (process.env.ZOHO_CLIENT_ID || "").trim();
+    const clientSecret = (process.env.ZOHO_CLIENT_SECRET || "").trim();
+    const redirectUri = (process.env.ZOHO_REDIRECT_URI || "https://jewelskart-backend-gt7z.onrender.com/auth/zoho/callback").trim();
+
+    console.log("\n" + "=".repeat(60));
+    console.log("🔔 [paymentRoutes] ZOHO OAUTH CALLBACK HIT");
+    console.log("=".repeat(60));
+    console.log("📥 Query params:", req.query);
 
     if (error) {
+        console.error("❌ Zoho returned error:", error, error_description);
         return res.status(400).send(`<h2>❌ Zoho OAuth Error</h2><p>${error}: ${error_description || ''}</p>`);
     }
 
     if (!code) {
-        const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${process.env.ZOHO_CLIENT_ID}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
+        const authUrl = `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${clientId}&scope=ZohoPayments.fullaccess.ALL&redirect_uri=${encodeURIComponent(redirectUri)}&access_type=offline&prompt=consent`;
         return res.status(400).send(`<h2>🔑 Zoho OAuth Callback</h2><p><a href="${authUrl}">Authorize with Zoho</a></p>`);
     }
+
+    console.log("📤 Token Exchange Request Parameters:");
+    console.log("   - grant_type   : 'authorization_code'");
+    console.log("   - client_id    :", clientId);
+    console.log("   - client_secret:", clientSecret ? `${clientSecret.slice(0, 4)}...${clientSecret.slice(-4)}` : "❌ MISSING");
+    console.log("   - redirect_uri :", redirectUri);
+    console.log("   - code         :", code ? `${code.trim().slice(0, 10)}...` : "❌ MISSING");
 
     try {
         const params = new URLSearchParams({
             grant_type: 'authorization_code',
-            client_id: process.env.ZOHO_CLIENT_ID,
-            client_secret: process.env.ZOHO_CLIENT_SECRET,
+            client_id: clientId,
+            client_secret: clientSecret,
             redirect_uri: redirectUri,
-            code
+            code: code.trim()
         });
 
         const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
@@ -38,11 +53,20 @@ router.get('/zoho/callback', async (req, res) => {
             body: params.toString()
         });
 
-        const data = await response.json();
+        const rawText = await response.text();
+        console.log("📥 Zoho Token Response (Status " + response.status + "):", rawText);
+
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch {
+            data = { error: "non_json_response", rawText };
+        }
 
         if (data.access_token) {
             process.env.ZOHO_ACCESS_TOKEN = data.access_token;
             if (data.refresh_token) process.env.ZOHO_REFRESH_TOKEN = data.refresh_token;
+            console.log("✅ OAuth tokens stored in process.env");
         }
 
         res.json({
@@ -53,9 +77,14 @@ router.get('/zoho/callback', async (req, res) => {
             expires_in: data.expires_in,
             token_type: data.token_type,
             api_domain: data.api_domain,
+            debug_info: {
+                client_id: clientId,
+                redirect_uri: redirectUri
+            },
             ...data
         });
     } catch (err) {
+        console.error("❌ Exception during Zoho token exchange:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
