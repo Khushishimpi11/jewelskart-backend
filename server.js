@@ -355,21 +355,32 @@ cloudinary.config({
 console.log("✅ Cloudinary configured successfully");
 
 // CORS Configuration
+const allowedOrigins = [
+  // Localhost dev origins
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:8080',
+  'http://localhost:8081',
+  // Production origins
+  'https://www.jewelskartindia.com',
+  'https://jewelskartindia.com',
+  'https://admin.jewelskartindia.com',
+  'https://jewelskart-backend-gt7z.onrender.com',
+  // Zoho accounts (for OAuth redirects)
+  'https://accounts.zoho.in',
+  'https://payments.zoho.in'
+];
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like native mobile apps, curl, postman)
+    // Allow requests with no origin (curl, Postman, Zoho server-side redirects)
     if (!origin) return callback(null, true);
-
-    // In development mode, allow any localhost or 127.0.0.1 origin (with any port)
-    if (process.env.NODE_ENV === "development" || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      return callback(null, true);
-    }
-
-    const allowedOrigins = ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-
+    // Allow any localhost or 127.0.0.1 (any port)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    // In development, allow all
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
