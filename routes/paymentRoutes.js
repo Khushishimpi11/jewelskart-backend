@@ -101,6 +101,7 @@ router.post('/create-session', protect, async (req, res) => {
             });
         }
 
+        // createPaymentSession throws if Zoho doesn't return a real session ID
         const sessionResponse = await createPaymentSession({
             amount,
             currency,
@@ -110,9 +111,9 @@ router.post('/create-session', protect, async (req, res) => {
             configurations: configurations || {}
         });
 
-        const sessionId = sessionResponse.payments_session_id || sessionResponse.session_id || sessionResponse.id;
+        const sessionId = sessionResponse.payments_session_id;
 
-        // If an order ID was provided, save the payment session ID to the order
+        // Save session ID to the order if provided
         if (orderId && sessionId) {
             const order = await Order.findById(orderId);
             if (order) {
@@ -121,12 +122,12 @@ router.post('/create-session', protect, async (req, res) => {
             }
         }
 
+        // Return ONLY payments_session_id — do not rename or alias
         res.json({
-            success: true,
             payments_session_id: sessionId,
-            session: sessionResponse,
-            account_id: process.env.ZOHO_ACCOUNT_ID,
-            api_key: process.env.ZOHO_API_KEY
+            account_id: sessionResponse.account_id,
+            amount: sessionResponse.amount,
+            currency: sessionResponse.currency
         });
 
     } catch (error) {
@@ -137,6 +138,7 @@ router.post('/create-session', protect, async (req, res) => {
         });
     }
 });
+
 
 // ========== STEP 8: VERIFY PAYMENT ==========
 router.post('/verify', protect, async (req, res) => {

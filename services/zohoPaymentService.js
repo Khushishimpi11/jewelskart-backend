@@ -115,63 +115,90 @@ async function getZohoAccessToken() {
 
 /**
  * STEP 5 - Create Payment Session
+ * Zoho Payments Session API: POST https://payments.zoho.in/api/v1/paymentsessions?account_id=<id>
+ * Required fields per Zoho documentation: amount, currency, description
  */
-async function createPaymentSession({ amount, currency = 'INR', description = 'JewelsKart Order Payment', invoice_number, reference_number, configurations = {} }) {
-  try {
-    const accessToken = await getZohoAccessToken();
-    const accountId = process.env.ZOHO_ACCOUNT_ID || "23137556";
+async function createPaymentSession({ amount, currency = 'INR', description = 'JewelsKart Order Payment', invoice_number, reference_number }) {
+  const accessToken = await getZohoAccessToken();
+  const accountId = process.env.ZOHO_ACCOUNT_ID;
 
-    const payload = {
-      amount: parseFloat(amount),
-      currency: currency || 'INR',
-      description: description || 'JewelsKart Order Payment',
-      invoice_number: invoice_number || `INV-${Date.now()}`,
-      reference_number: reference_number || `REF-${Date.now()}`,
-      configurations: configurations || {}
-    };
-
-    let data = {};
-    const response = await fetch(`https://payments.zoho.in/api/v1/paymentsessions?account_id=${accountId}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    data = await response.json();
-
-    const isZohoError = !response.ok || (data.code !== undefined && data.code !== 0 && data.status !== 'success');
-    if (isZohoError) {
-      console.warn('⚠️ Zoho Payment API Response:', data);
-    }
-
-    const sessionId = data.payments_session_id || data.session_id || data.id || `zpay_session_${Date.now()}`;
-
-    // Filter out error properties if falling back to generated session ID
-    const sanitizedData = isZohoError ? {} : data;
-
-    return {
-      success: true,
-      payments_session_id: sessionId,
-      session_id: sessionId,
-      id: sessionId,
-      amount: payload.amount,
-      currency: payload.currency,
-      account_id: accountId,
-      ...sanitizedData
-    };
-  } catch (error) {
-    console.error('Error creating Zoho payment session:', error.message);
-    const fallbackSessionId = `zpay_session_${Date.now()}`;
-    return {
-      success: true,
-      payments_session_id: fallbackSessionId,
-      session_id: fallbackSessionId,
-      account_id: process.env.ZOHO_ACCOUNT_ID || "23137556"
-    };
+  if (!accountId) {
+    throw new Error('ZOHO_ACCOUNT_ID is not set in environment variables');
   }
+
+  // Payload matching Zoho Payments API spec exactly
+  // Field names confirmed from official documentation
+  const payload = {
+    amount: Number(amount).toFixed(2),
+    currency: 'INR',
+    description: description || 'JewelsKart Order Payment',
+    invoice_number: invoice_number || `INV-${Date.now()}`,
+    reference_number: reference_number || `REF-${Date.now()}`
+  };
+
+  const requestBody = JSON.stringify(payload);
+  const requestUrl = `https://payments.zoho.in/api/v1/paymentsessions?account_id=${accountId}`;
+
+  // Log exact HTTP request body before sending
+  console.log('\n' + '='.repeat(60));
+  console.log('💳 [createPaymentSession] REQUEST');
+  console.log('  URL :', requestUrl);
+  console.log('  Body:', requestBody);
+  console.log('='.repeat(60));
+
+  const response = await fetch(requestUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Zoho-oauthtoken ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: requestBody
+  });
+
+  // Log raw response text BEFORE any parsing
+  const rawResponseText = await response.text();
+  console.log('💳 [createPaymentSession] RESPONSE');
+  console.log('  HTTP Status:', response.status);
+  console.log('  Raw Body   :', rawResponseText);
+  console.log('='.repeat(60) + '\n');
+
+  let data;
+  try {
+    data = JSON.parse(rawResponseText);
+  } catch {
+    throw new Error(`Zoho returned non-JSON response (HTTP ${response.status}): ${rawResponseText}`);
+  }
+
+  if (!response.ok || data.error || (data.code !== undefined && data.code !== 0 && data.status !== 'success')) {
+    const errMsg = data.message || data.error || `Zoho API returned HTTP ${response.status}`;
+    throw new Error(`Zoho payment session creation failed: ${errMsg}`);
+  }
+
+  // Only accept the real payments_session_id field — no aliases, no fallbacks
+  const paymentSession = data.payments_session;
+
+  if (!paymentSession) {
+    throw new Error(
+      `Zoho response is missing payments_session. Full response: ${rawResponseText}`
+    );
+  }
+
+  const sessionId = paymentSession.payments_session_id;
+
+  if (!sessionId) {
+    throw new Error(
+      `Zoho response is missing payments_session_id. Full response: ${rawResponseText}`
+    );
+  }
+
+  return {
+    payments_session_id: sessionId,
+    amount: paymentSession.amount,
+    currency: paymentSession.currency,
+    account_id: accountId,
+    invoice_number: paymentSession.invoice_number,
+    reference_number: paymentSession.reference_number
+  };
 }
 
 /**
