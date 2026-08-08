@@ -83,7 +83,8 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       await product.save();
     }
 
-    const shippingCharge = subtotal > 5000 ? 0 : 100;
+    // ✅ Shipping rule: free above ₹5000, else ₹250 (matches frontend)
+    const shippingCharge = subtotal >= 5000 ? 0 : 250;
     const tax = Number(totalGstAmount.toFixed(2));
     const totalAmount = subtotal + shippingCharge;
     const totalExclGst = Number((subtotal - tax).toFixed(2));
@@ -110,6 +111,13 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         orderCount: 0
       });
       console.log(`✅ New customer created: ${customer.name} (${customer._id})`);
+    }
+
+    // ✅ Always sync customer name from JWT user (fixes name mismatch between User & Customer collections)
+    if (customer.name !== user.name && user.name) {
+      customer.name = user.name;
+      await customer.save();
+      console.log(`✅ Customer name synced from JWT: ${user.name}`);
     }
 
     // Create order with pending payment status

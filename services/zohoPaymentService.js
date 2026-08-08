@@ -146,13 +146,15 @@ async function createPaymentSession({
   console.log(`📌 Organization ID: ${organizationId}`);
   console.log(`📌 Account ID: ${accountId}`);
 
-  // 3. ✅ CORRECT API ENDPOINT (not the old one)
-  const apiDomain = process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.in';
-  const requestUrl = `${apiDomain}/payments/v1/payment_sessions`;
+  // 3. ✅ CORRECT API ENDPOINT — Zoho Payments India
+  // NOTE: zohoapis.in is for Zoho Books/CRM. Zoho Payments uses payments.zoho.in
+  const apiDomain = 'https://payments.zoho.in';
+  const requestUrl = `${apiDomain}/api/v1/paymentsessions`;
   console.log(`🌐 API URL: ${requestUrl}`);
 
-  // 4. Payload as per Zoho API spec
+  // 4. Payload as per Zoho Payments API spec
   const payload = {
+    account_id: accountId,                                    // ✅ REQUIRED by Zoho Payments
     amount: Number(amount).toFixed(2),
     currency_code: 'INR',
     description: description || 'JewelsKart Order Payment',
@@ -163,17 +165,20 @@ async function createPaymentSession({
   const requestBody = JSON.stringify(payload);
 
   console.log('📤 Request Details:');
+  console.log(`  URL: ${requestUrl}`);
   console.log(`  Body: ${requestBody}`);
-  console.log(`  Org ID: ${organizationId}`);
-  console.log(`  Token: ${accessToken.substring(0, 20)}...`);
+  console.log(`  Account ID: ${accountId}`);
+  console.log(`  Token (first 20): ${accessToken.substring(0, 20)}...`);
 
-  // 5. ✅ CORRECT HEADERS - This is the FIX!
+  // 5. ✅ CORRECT HEADERS for Zoho Payments API
+  // - Authorization must use 'Zoho-oauthtoken' (NOT 'Bearer') for Zoho Payments
+  // - Header is X-com-zoho-payments-accountid (NOT organizationid)
   const response = await fetch(requestUrl, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,  // ✅ Bearer (not Zoho-oauthtoken)
+      'Authorization': `Zoho-oauthtoken ${accessToken}`,     // ✅ Zoho Payments auth format
       'Content-Type': 'application/json',
-      'X-com-zoho-payments-organizationid': organizationId  // ✅ CRITICAL!
+      'X-com-zoho-payments-accountid': accountId             // ✅ Use accountId, not organizationId
     },
     body: requestBody
   });
