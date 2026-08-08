@@ -89,10 +89,15 @@ router.get('/zoho/callback', async (req, res) => {
     }
 });
 
-// ========== STEP 5: CREATE ZOHO PAYMENT SESSION ==========
+// ========== STEP 5: CREATE ZOHO PAYMENT SESSION (UPDATED) ==========
 router.post('/create-session', protect, async (req, res) => {
     try {
-        const { amount, currency = 'INR', description, invoice_number, reference_number, orderId, configurations } = req.body;
+        console.log('\n' + '='.repeat(60));
+        console.log('💳 [create-session] ENDPOINT HIT');
+        console.log('='.repeat(60));
+        console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+
+        const { amount, currency = 'INR', description, invoice_number, reference_number, orderId } = req.body;
 
         if (!amount || amount <= 0) {
             return res.status(400).json({
@@ -101,14 +106,13 @@ router.post('/create-session', protect, async (req, res) => {
             });
         }
 
-        // createPaymentSession throws if Zoho doesn't return a real session ID
+        // ✅ Create session with UPDATED service
         const sessionResponse = await createPaymentSession({
             amount,
-            currency,
+            currency: 'INR',
             description: description || `JewelsKart Order ${orderId || ''}`,
             invoice_number: invoice_number || `INV-${Date.now()}`,
-            reference_number: reference_number || (orderId ? orderId.toString() : `REF-${Date.now()}`),
-            configurations: configurations || {}
+            reference_number: reference_number || (orderId ? orderId.toString() : `REF-${Date.now()}`)
         });
 
         const sessionId = sessionResponse.payments_session_id;
@@ -119,11 +123,13 @@ router.post('/create-session', protect, async (req, res) => {
             if (order) {
                 order.zohoSessionId = sessionId;
                 await order.save();
+                console.log(`✅ Session ${sessionId} saved to order ${orderId}`);
             }
         }
 
-        // Return ONLY payments_session_id — do not rename or alias
+        // ✅ Return response with success flag
         res.json({
+            success: true,
             payments_session_id: sessionId,
             account_id: sessionResponse.account_id,
             amount: sessionResponse.amount,
@@ -131,14 +137,14 @@ router.post('/create-session', protect, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error creating Zoho payment session:', error);
+        console.error('❌ Error creating Zoho payment session:', error);
+        console.error('❌ Error stack:', error.stack);
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to create Zoho payment session'
         });
     }
 });
-
 
 // ========== STEP 8: VERIFY PAYMENT ==========
 router.post('/verify', protect, async (req, res) => {

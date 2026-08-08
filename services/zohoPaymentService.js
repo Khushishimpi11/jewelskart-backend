@@ -30,7 +30,6 @@ async function exchangeAuthCode(code) {
 
     if (data.access_token) {
       cachedAccessToken = data.access_token;
-      // Set expiry timestamp with 1 minute buffer
       tokenExpiryTimestamp = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
       process.env.ZOHO_ACCESS_TOKEN = data.access_token;
       if (data.refresh_token) {
@@ -46,13 +45,13 @@ async function exchangeAuthCode(code) {
 }
 
 /**
- * STEP 4 - Auto Refresh Access Token
- * Helper getZohoAccessToken()
+ * STEP 4 - Auto Refresh Access Token (UPDATED)
  */
 async function getZohoAccessToken() {
   try {
     // 1. If cached token is valid and not expired, use it
     if (cachedAccessToken && tokenExpiryTimestamp > 0 && Date.now() < tokenExpiryTimestamp) {
+      console.log('✅ Using cached Zoho access token');
       return cachedAccessToken;
     }
 
@@ -78,7 +77,11 @@ async function getZohoAccessToken() {
       client_secret: clientSecret
     });
 
-    const response = await fetch('https://accounts.zoho.in/oauth/v2/token', {
+    // ✅ Using correct domain
+    const tokenUrl = 'https://accounts.zoho.in/oauth/v2/token';
+    console.log('🔄 Refreshing Zoho access token...');
+
+    const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -89,20 +92,20 @@ async function getZohoAccessToken() {
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      console.error('❌ Zoho token refresh error:', data.error || data.message || 'Failed to refresh token');
-      // If refresh API call fails (e.g. rate limit), fallback to env access token if present
+      console.error('❌ Zoho token refresh error:', data.error || data.message);
+      // If refresh API call fails, fallback to env access token if present
       if (process.env.ZOHO_ACCESS_TOKEN && process.env.ZOHO_ACCESS_TOKEN.trim() !== '') {
+        console.warn('⚠️ Using fallback ZOHO_ACCESS_TOKEN from env');
         return process.env.ZOHO_ACCESS_TOKEN.trim();
       }
       throw new Error(data.error || data.message || 'Failed to refresh Zoho access token');
     }
 
     cachedAccessToken = data.access_token;
-    // Set expiry timestamp with 60-second buffer
     tokenExpiryTimestamp = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
     process.env.ZOHO_ACCESS_TOKEN = data.access_token;
 
-    console.log('✅ Zoho access token refreshed successfully via OAuth');
+    console.log('✅ Zoho access token refreshed successfully');
     return cachedAccessToken;
   } catch (error) {
     console.error('Error in getZohoAccessToken:', error.message);
@@ -114,52 +117,72 @@ async function getZohoAccessToken() {
 }
 
 /**
- * STEP 5 - Create Payment Session
- * Zoho Payments Session API: POST https://payments.zoho.in/api/v1/paymentsessions?account_id=<id>
- * Required fields per Zoho documentation: amount, currency, description
+ * STEP 5 - Create Payment Session (COMPLETELY UPDATED)
  */
-async function createPaymentSession({ amount, currency = 'INR', description = 'JewelsKart Order Payment', invoice_number, reference_number }) {
-  const accessToken = await getZohoAccessToken();
-  const accountId = process.env.ZOHO_ACCOUNT_ID;
+async function createPaymentSession({
+  amount,
+  currency = 'INR',
+  description = 'JewelsKart Order Payment',
+  invoice_number,
+  reference_number
+}) {
+  console.log('\n' + '='.repeat(60));
+  console.log('💳 [createPaymentSession] START');
+  console.log('='.repeat(60));
 
-  if (!accountId) {
-    throw new Error('ZOHO_ACCOUNT_ID is not set in environment variables');
+  // 1. Get access token
+  const accessToken = await getZohoAccessToken();
+  console.log('✅ Access token obtained');
+
+  // 2. Get organization ID (CRITICAL - this was missing!)
+  const organizationId = (process.env.ZOHO_ORGANIZATION_ID || '').trim();
+  const accountId = (process.env.ZOHO_ACCOUNT_ID || '').trim();
+
+  if (!organizationId) {
+    console.error('❌ ZOHO_ORGANIZATION_ID is missing!');
+    throw new Error('ZOHO_ORGANIZATION_ID is not set in environment variables');
   }
 
-  // Payload matching Zoho Payments API spec exactly
-  // Field names confirmed from official documentation
+  console.log(`📌 Organization ID: ${organizationId}`);
+  console.log(`📌 Account ID: ${accountId}`);
+
+  // 3. ✅ CORRECT API ENDPOINT (not the old one)
+  const apiDomain = process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.in';
+  const requestUrl = `${apiDomain}/payments/v1/payment_sessions`;
+  console.log(`🌐 API URL: ${requestUrl}`);
+
+  // 4. Payload as per Zoho API spec
   const payload = {
     amount: Number(amount).toFixed(2),
-    currency: 'INR',
+    currency_code: 'INR',
     description: description || 'JewelsKart Order Payment',
     invoice_number: invoice_number || `INV-${Date.now()}`,
     reference_number: reference_number || `REF-${Date.now()}`
   };
 
   const requestBody = JSON.stringify(payload);
-  const requestUrl = `https://payments.zoho.in/api/v1/paymentsessions?account_id=${accountId}`;
 
-  // Log exact HTTP request body before sending
-  console.log('\n' + '='.repeat(60));
-  console.log('💳 [createPaymentSession] REQUEST');
-  console.log('  URL :', requestUrl);
-  console.log('  Body:', requestBody);
-  console.log('='.repeat(60));
+  console.log('📤 Request Details:');
+  console.log(`  Body: ${requestBody}`);
+  console.log(`  Org ID: ${organizationId}`);
+  console.log(`  Token: ${accessToken.substring(0, 20)}...`);
 
+  // 5. ✅ CORRECT HEADERS - This is the FIX!
   const response = await fetch(requestUrl, {
     method: 'POST',
     headers: {
-      'Authorization': `Zoho-oauthtoken ${accessToken}`,
-      'Content-Type': 'application/json'
+      'Authorization': `Bearer ${accessToken}`,  // ✅ Bearer (not Zoho-oauthtoken)
+      'Content-Type': 'application/json',
+      'X-com-zoho-payments-organizationid': organizationId  // ✅ CRITICAL!
     },
     body: requestBody
   });
 
-  // Log raw response text BEFORE any parsing
+  // 6. Log raw response
   const rawResponseText = await response.text();
-  console.log('💳 [createPaymentSession] RESPONSE');
-  console.log('  HTTP Status:', response.status);
-  console.log('  Raw Body   :', rawResponseText);
+  console.log('📥 Response Details:');
+  console.log(`  HTTP Status: ${response.status}`);
+  console.log(`  Raw Body: ${rawResponseText}`);
   console.log('='.repeat(60) + '\n');
 
   let data;
@@ -169,32 +192,33 @@ async function createPaymentSession({ amount, currency = 'INR', description = 'J
     throw new Error(`Zoho returned non-JSON response (HTTP ${response.status}): ${rawResponseText}`);
   }
 
-  if (!response.ok || data.error || (data.code !== undefined && data.code !== 0 && data.status !== 'success')) {
+  // 7. Check for errors
+  if (!response.ok || data.error || data.code === 'ERROR') {
     const errMsg = data.message || data.error || `Zoho API returned HTTP ${response.status}`;
+    console.error(`❌ Zoho API error: ${errMsg}`);
     throw new Error(`Zoho payment session creation failed: ${errMsg}`);
   }
 
-  // Only accept the real payments_session_id field — no aliases, no fallbacks
-  const paymentSession = data.payments_session;
+  // 8. Extract payment session
+  const paymentSession = data.payments_session || data.data;
 
   if (!paymentSession) {
-    throw new Error(
-      `Zoho response is missing payments_session. Full response: ${rawResponseText}`
-    );
+    throw new Error(`Zoho response is missing payments_session. Full response: ${rawResponseText}`);
   }
 
-  const sessionId = paymentSession.payments_session_id;
+  const sessionId = paymentSession.payments_session_id || paymentSession.id;
 
   if (!sessionId) {
-    throw new Error(
-      `Zoho response is missing payments_session_id. Full response: ${rawResponseText}`
-    );
+    throw new Error(`Zoho response is missing payments_session_id. Full response: ${rawResponseText}`);
   }
+
+  console.log('✅ Payment session created successfully!');
+  console.log(`📌 Session ID: ${sessionId}`);
 
   return {
     payments_session_id: sessionId,
-    amount: paymentSession.amount,
-    currency: paymentSession.currency,
+    amount: paymentSession.amount || amount,
+    currency: paymentSession.currency_code || paymentSession.currency || 'INR',
     account_id: accountId,
     invoice_number: paymentSession.invoice_number,
     reference_number: paymentSession.reference_number
@@ -202,7 +226,7 @@ async function createPaymentSession({ amount, currency = 'INR', description = 'J
 }
 
 /**
- * Verify Signature Helper using ZOHO_SIGNING_KEY
+ * Verify Signature Helper
  */
 function verifyZohoSignature(payloadData, signature) {
   try {
