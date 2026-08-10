@@ -159,10 +159,8 @@ async function createPaymentSession({
 
   // 4. Payload as per Zoho Payments API spec
   const payload = {
-    account_id: accountId,
-    amount: Number(amount).toFixed(2),
+    amount: Number(amount),
     currency: currency || 'INR',
-    currency_code: currency || 'INR',
     description: description || 'JewelsKart Order Payment',
     invoice_number: invoice_number || `INV-${Date.now()}`,
     reference_number: reference_number || `REF-${Date.now()}`

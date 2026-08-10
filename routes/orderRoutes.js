@@ -117,7 +117,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     }
 
     // ✅ Shipping rule: free above ₹5000, else ₹250 (matches frontend)
-    const shippingCharge = subtotal >= 5000 ? 0 : 250;
+    const shippingCharge = 0;
     const tax = Number(totalGstAmount.toFixed(2));
     const totalAmount = subtotal + shippingCharge;
     const totalExclGst = Number((subtotal - tax).toFixed(2));
