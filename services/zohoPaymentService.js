@@ -147,16 +147,22 @@ async function createPaymentSession({
   console.log(`📌 Account ID: ${accountId}`);
 
   // 3. ✅ CORRECT API ENDPOINT — Zoho Payments India
-  // NOTE: zohoapis.in is for Zoho Books/CRM. Zoho Payments uses payments.zoho.in
+  // NOTE: Zoho Payments requires account_id as a query parameter in the URL (e.g., ?account_id=...)
   const apiDomain = 'https://payments.zoho.in';
-  const requestUrl = `${apiDomain}/api/v1/paymentsessions`;
-  console.log(`🌐 API URL: ${requestUrl}`);
+  const requestUrl = `${apiDomain}/api/v1/paymentsessions?account_id=${encodeURIComponent(accountId)}`;
+
+  // Safe backend logging
+  console.log("Zoho API URL:", requestUrl);
+  console.log("Zoho request method:", "POST");
+  console.log("Zoho account ID present:", !!accountId);
+  console.log("Zoho access token present:", !!accessToken);
 
   // 4. Payload as per Zoho Payments API spec
   const payload = {
-    account_id: accountId,                                    // ✅ REQUIRED by Zoho Payments
+    account_id: accountId,
     amount: Number(amount).toFixed(2),
-    currency_code: 'INR',
+    currency: currency || 'INR',
+    currency_code: currency || 'INR',
     description: description || 'JewelsKart Order Payment',
     invoice_number: invoice_number || `INV-${Date.now()}`,
     reference_number: reference_number || `REF-${Date.now()}`
@@ -168,17 +174,14 @@ async function createPaymentSession({
   console.log(`  URL: ${requestUrl}`);
   console.log(`  Body: ${requestBody}`);
   console.log(`  Account ID: ${accountId}`);
-  console.log(`  Token (first 20): ${accessToken.substring(0, 20)}...`);
 
   // 5. ✅ CORRECT HEADERS for Zoho Payments API
-  // - Authorization must use 'Zoho-oauthtoken' (NOT 'Bearer') for Zoho Payments
-  // - Header is X-com-zoho-payments-accountid (NOT organizationid)
   const response = await fetch(requestUrl, {
     method: 'POST',
     headers: {
-      'Authorization': `Zoho-oauthtoken ${accessToken}`,     // ✅ Zoho Payments auth format
+      'Authorization': `Zoho-oauthtoken ${accessToken}`,
       'Content-Type': 'application/json',
-      'X-com-zoho-payments-accountid': accountId             // ✅ Use accountId, not organizationId
+      'X-com-zoho-payments-accountid': accountId
     },
     body: requestBody
   });

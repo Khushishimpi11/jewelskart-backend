@@ -4,6 +4,7 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Tracking = require("../models/Tracking");
 const Customer = require("../models/Customer");
+const mongoose = require("mongoose");
 const { protect, adminOnly, customerOnly } = require("../middleware/auth");
 const { createPaymentSession, verifyZohoSignature } = require("../services/zohoPaymentService");
 const { sendOrderConfirmationEmail } = require("../services/emailService");
@@ -40,36 +41,71 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     const orderItems = [];
 
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      let product = null;
 
-      if (!product) {
-        return res.status(404).json({ success: false, message: `Product not found` });
+      // 1. Try finding by MongoDB ObjectId if item.productId is a valid ObjectId
+      if (item.productId && mongoose.Types.ObjectId.isValid(item.productId)) {
+        product = await Product.findById(item.productId);
       }
 
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
+      // 2. If not found by ObjectId, try searching by SKU or name
+      if (!product && (item.productId || item.name)) {
+        product = await Product.findOne({
+          $or: [
+            ...(item.productId ? [{ sku: item.productId }] : []),
+            ...(item.name ? [{ name: item.name }] : [])
+          ]
         });
       }
 
-      const itemTotal = product.price * item.quantity;
+      let itemPrice = 0;
+      let gstPercent = 3;
+      let productName = "";
+      let productSku = "";
+      let productImageUrl = "";
+      let dbProductId = null;
+
+      if (product) {
+        if (product.stock < item.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
+          });
+        }
+        itemPrice = product.price;
+        gstPercent = product.gst !== undefined ? product.gst : 3;
+        productName = product.name;
+        productSku = product.sku || product._id.toString();
+        productImageUrl = product.mainImage?.url || product.images?.[0] || item.image || "";
+        dbProductId = product._id;
+
+        product.stock -= item.quantity;
+        await product.save();
+      } else {
+        // Fallback for static/mock products not yet in DB
+        console.warn(`⚠️ Product not found in DB for ID/Name "${item.productId}" / "${item.name}". Using fallback payload values.`);
+        itemPrice = item.price || 0;
+        gstPercent = item.gst !== undefined ? item.gst : 3;
+        productName = item.name || "Jewellery Product";
+        productSku = item.sku || (typeof item.productId === 'string' ? item.productId : "SKU-GENERIC");
+        productImageUrl = item.image || "";
+        dbProductId = null;
+      }
+
+      const itemTotal = itemPrice * item.quantity;
       subtotal += itemTotal;
 
-      const gstPercent = product.gst !== undefined ? product.gst : 3;
-      const priceExclGst = Number((product.price / (1 + gstPercent / 100)).toFixed(2));
+      const priceExclGst = Number((itemPrice / (1 + gstPercent / 100)).toFixed(2));
       const itemGstAmount = Number((itemTotal - (priceExclGst * item.quantity)).toFixed(2));
       totalGstAmount += itemGstAmount;
 
-      const productImageUrl = product.mainImage?.url || product.images?.[0] || "";
-
       orderItems.push({
-        productId: product._id,
-        productName: product.name,
-        productSku: product.sku,
+        productId: dbProductId,
+        productName: productName,
+        productSku: productSku,
         productImage: productImageUrl,
         quantity: item.quantity,
-        price: product.price,
+        price: itemPrice,
         total: itemTotal,
         size: item.size || item.selectedSize || "",
         priceExclGst,
@@ -77,10 +113,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         gstAmount: itemGstAmount
       });
 
-      console.log(`📦 Order item: ${product.name}, Size: ${item.size || item.selectedSize || 'Not specified'}, GST: ${gstPercent}%`);
-
-      product.stock -= item.quantity;
-      await product.save();
+      console.log(`📦 Order item processed: ${productName}, Size: ${item.size || item.selectedSize || 'Not specified'}, GST: ${gstPercent}%`);
     }
 
     // ✅ Shipping rule: free above ₹5000, else ₹250 (matches frontend)
