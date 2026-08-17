@@ -13,7 +13,7 @@ router.post("/request", protect, customerOnly, async (req, res) => {
   try {
     const {
       orderId, productId, productName, quantity, price,
-      reason, description, requestType, images, video,
+      reason, description, requestType, images, video, unboxingVideoName,
       refundDetails, exchangeDetails
     } = req.body;
 
@@ -103,6 +103,7 @@ router.post("/request", protect, customerOnly, async (req, res) => {
       requestType,
       images: images || [],
       video: video || null,
+      unboxingVideoName: unboxingVideoName || "",
       refundDetails: finalRefundDetails,
       exchangeDetails: finalExchangeDetails,
       status: "pending",
@@ -513,20 +514,40 @@ router.put("/admin/:id/reject", protect, adminOnly, async (req, res) => {
 
     returnRequest.status = "rejected";
     returnRequest.adminNote = adminNote || "Request rejected";
+    returnRequest.updatedAt = new Date();
     await returnRequest.save();
 
-    await Notification.create({
-      userId: returnRequest.customerId,
-      userEmail: returnRequest.customerEmail,
-      type: returnRequest.requestType === 'exchange' ? 'exchange_rejected' : 'return_rejected',
-      title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Rejected ❌`,
-      message: `Your ${returnRequest.requestType} request for ${returnRequest.productName} has been rejected. Reason: ${adminNote || "Product condition not eligible"}`,
-      actionLink: "/orders",
-      isRead: false
-    });
+    const order = await Order.findById(returnRequest.orderId);
+    if (order) {
+      if (returnRequest.requestType === "cancel") {
+        order.orderStatus = "Cancel Rejected";
+      } else if (returnRequest.requestType === "return") {
+        order.orderStatus = "Return Rejected";
+      } else if (returnRequest.requestType === "exchange") {
+        order.orderStatus = "Exchange Rejected";
+      }
+      await order.save();
+    }
 
-    res.json({ success: true, message: "Request rejected", request: returnRequest });
+    try {
+      if (returnRequest.customerId) {
+        await Notification.create({
+          userId: returnRequest.customerId,
+          userEmail: returnRequest.customerEmail || "",
+          type: returnRequest.requestType === 'exchange' ? 'exchange_rejected' : 'return_rejected',
+          title: `${returnRequest.requestType === "cancel" ? "Cancellation" : returnRequest.requestType === "return" ? "Return" : "Exchange"} Request Rejected ❌`,
+          message: `Your ${returnRequest.requestType} request for ${returnRequest.productName || 'product'} has been rejected. Reason: ${adminNote || "Product condition not eligible"}`,
+          actionLink: "/orders",
+          isRead: false
+        });
+      }
+    } catch (notifErr) {
+      console.error("Notification error on reject:", notifErr);
+    }
+
+    res.json({ success: true, message: "Request rejected", request: returnRequest, order });
   } catch (error) {
+    console.error("Reject request error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

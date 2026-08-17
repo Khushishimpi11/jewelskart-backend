@@ -19,10 +19,13 @@ function mapOrderStatusToTracking(orderStatus) {
     "Out for Delivery": "OUT_FOR_DELIVERY",
     "Delivered": "DELIVERED",
     "Cancelled": "CANCELLED",
+    "Cancel Rejected": "CANCEL_REJECTED",
     "Return Requested": "RETURN_REQUESTED",
     "Return Approved": "RETURN_APPROVED",
+    "Return Rejected": "RETURN_REJECTED",
     "Exchange Requested": "EXCHANGE_REQUESTED",
-    "Exchange Approved": "EXCHANGE_APPROVED"
+    "Exchange Approved": "EXCHANGE_APPROVED",
+    "Exchange Rejected": "EXCHANGE_REJECTED"
   };
   return mapping[orderStatus] || "CONFIRMED";
 }
@@ -66,10 +69,10 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       let dbProductId = null;
 
       if (product) {
-        if (product.stock < item.quantity) {
+        if (product.isAvailableForOrder === false) {
           return res.status(400).json({
             success: false,
-            message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
+            message: `${product.name} is currently not available for order.`
           });
         }
         itemPrice = product.price;
@@ -78,9 +81,6 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         productSku = product.sku || product._id.toString();
         productImageUrl = product.mainImage?.url || product.images?.[0] || item.image || "";
         dbProductId = product._id;
-
-        product.stock -= item.quantity;
-        await product.save();
       } else {
         // Fallback for static/mock products not yet in DB
         console.warn(`⚠️ Product not found in DB for ID/Name "${item.productId}" / "${item.name}". Using fallback payload values.`);
@@ -95,9 +95,9 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       const itemTotal = itemPrice * item.quantity;
       subtotal += itemTotal;
 
-      const priceExclGst = Number((itemPrice / (1 + gstPercent / 100)).toFixed(2));
-      const itemGstAmount = Number((itemTotal - (priceExclGst * item.quantity)).toFixed(2));
-      totalGstAmount += itemGstAmount;
+      // GST EXCLUSIVE: GST is added on top of the product price
+      const gstAmount = Number((itemTotal * gstPercent / 100).toFixed(2));
+      totalGstAmount += gstAmount;
 
       orderItems.push({
         productId: dbProductId,
@@ -108,19 +108,19 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         price: itemPrice,
         total: itemTotal,
         size: item.size || item.selectedSize || "",
-        priceExclGst,
         gstPercent,
-        gstAmount: itemGstAmount
+        gstAmount
       });
 
       console.log(`📦 Order item processed: ${productName}, Size: ${item.size || item.selectedSize || 'Not specified'}, GST: ${gstPercent}%`);
     }
 
-    // ✅ Shipping rule: free above ₹5000, else ₹250 (matches frontend)
-    const shippingCharge = 0;
+    // Fixed ₹1,200 shipping pan-India (one-time per order)
+    const shippingCharge = 1200;
     const tax = Number(totalGstAmount.toFixed(2));
-    const totalAmount = subtotal + shippingCharge;
-    const totalExclGst = Number((subtotal - tax).toFixed(2));
+    // Total = product subtotal + GST (exclusive) + shipping
+    const totalAmount = subtotal + tax + shippingCharge;
+    const totalExclGst = subtotal; // subtotal is already excl. GST in the new model
 
     const user = req.user;
 

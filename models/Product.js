@@ -9,16 +9,16 @@ const goldDetailsSchema = new mongoose.Schema({
 
 // Specifications Schema
 const specificationsSchema = new mongoose.Schema({
-  material: { type: String, default: "18K Gold" },
+  material: { type: String, default: "Gold" },
   finish: { type: String, default: "High Polish" },
   hallmark: { type: String, default: "BIS Hallmarked" },
   certification: { type: String, default: "IGI Certified" },
   ringSizes: [{ type: String }],
   gender: { type: String, default: "Women" },
-  occasion: { type: String, default: "Wedding" },
+  occasion: { type: String, default: "" },
   stoneType: { type: String, default: "Diamond" },
   stoneWeight: { type: Number, default: 0 },
-  warranty: { type: String, default: "1 Year Manufacturing Warranty" }
+  warranty: { type: String, default: "" }
 });
 
 // Care Instructions Schema
@@ -78,6 +78,7 @@ const productSchema = new mongoose.Schema({
   categoryName: { type: String, default: "" },
   brand: { type: String, default: 'JewelsKart Original' },
   stock: { type: Number, default: 0 },
+  isAvailableForOrder: { type: Boolean, default: true },
   description: { type: String, default: '' },
 
   // ========== EXISTING IMAGES FIELD (Keep for backward compatibility) ==========
@@ -111,6 +112,7 @@ const productSchema = new mongoose.Schema({
   featured: { type: Boolean, default: false },
   bestSeller: { type: Boolean, default: false },
   gst: { type: Number, default: 3 },
+  ringSizes: [{ type: String }],
 
   goldDetails: { type: goldDetailsSchema, default: () => ({}) },
   specifications: { type: specificationsSchema, default: () => ({}) },

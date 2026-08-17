@@ -60,21 +60,21 @@ const orderSchema = new mongoose.Schema({
     default: "Pending"
   },
 
-  // ✅ Order Status - Complete list with "Pending Payment"
+  // ✅ Order Status - Complete list with "Pending Payment" & Rejections
   orderStatus: {
     type: String,
     enum: [
       // Normal order statuses
       "Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered", "Cancelled",
-      "Pending Payment", "Pending",
+      "Pending Payment", "Pending", "Cancel Rejected",
 
       // Return statuses
-      "Return Requested", "Return Under Review", "Return Approved",
+      "Return Requested", "Return Under Review", "Return Approved", "Return Rejected",
       "Return Pickup Scheduled", "Return Picked Up", "Return Quality Check",
       "Return Refund Initiated", "Return Refund Completed",
 
       // Exchange statuses
-      "Exchange Requested", "Exchange Under Review", "Exchange Approved",
+      "Exchange Requested", "Exchange Under Review", "Exchange Approved", "Exchange Rejected",
       "Exchange Pickup Scheduled", "Exchange Picked Up", "Exchange Quality Check",
       "Exchange Replacement Processing", "Exchange Shipped", "Exchange Delivered"
     ],

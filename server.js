@@ -1,3 +1,11 @@
+const dns = require("dns");
+// Set reliable DNS servers to resolve MongoDB Atlas SRV records
+try {
+  dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+} catch (e) {
+  console.warn("Could not set custom DNS servers:", e.message);
+}
+
 const nodemailer = require("nodemailer");
 const express = require("express");
 const mongoose = require("mongoose");
@@ -8,7 +16,6 @@ const path = require("path");
 require("dotenv").config();
 
 // Import notification cron jobs
-const stockChecker = require("./cron/stockChecker");
 
 const app = express();
 
@@ -1059,8 +1066,6 @@ app.patch("/api/cms/admin/testimonial-section", async (req, res) => {
 });
 
 // ============ INITIALIZE NOTIFICATION CRON JOBS ============
-stockChecker.setupLowStockChecker();
-stockChecker.setupOutOfStockChecker();
 console.log("✅ Notification cron jobs initialized");
 
 // ============ TEST ROUTES ============
@@ -1095,7 +1100,8 @@ app.use((err, req, res, next) => {
 // ============ DATABASE CONNECTION ============
 const connectDB = async () => {
   try {
-    await mongoose.connect("mongodb+srv://jewelskartindia16_db_user:Jewelskart%2316@cluster0.sx8d4xv.mongodb.net/?appName=Cluster0");
+    const mongoUri = process.env.MONGODB_URI || "mongodb+srv://jewelskartindia16_db_user:Jewelskart%2316@cluster0.sx8d4xv.mongodb.net/?appName=Cluster0";
+    await mongoose.connect(mongoUri);
     console.log("✅ MongoDB Connected Successfully");
   } catch (err) {
     console.log("❌ MongoDB Connection Error:", err.message);

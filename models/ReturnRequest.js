@@ -25,6 +25,7 @@ const returnRequestSchema = new mongoose.Schema({
   // Customer uploaded proof
   images: [{ type: String }],
   video: { type: String, default: null },
+  unboxingVideoName: { type: String, default: "" },
   
   // Refund details (for return & cancel)
   refundDetails: {
