@@ -69,6 +69,14 @@ const galleryImageSchema = new mongoose.Schema({
   alt: { type: String, default: "" }
 }, { _id: false });
 
+// Couple Ring Details Schema
+const coupleRingDetailsSchema = new mongoose.Schema({
+  womenPrice: { type: Number, default: 0 },
+  womenWeight: { type: Number, default: 0 },
+  menPrice: { type: Number, default: 0 },
+  menWeight: { type: Number, default: 0 }
+}, { _id: false });
+
 // Main Product Schema
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -80,6 +88,9 @@ const productSchema = new mongoose.Schema({
   stock: { type: Number, default: 0 },
   isAvailableForOrder: { type: Boolean, default: true },
   description: { type: String, default: '' },
+
+  // ========== COUPLE RING DETAILS ==========
+  coupleRing: { type: coupleRingDetailsSchema, default: null },
 
   // ========== EXISTING IMAGES FIELD (Keep for backward compatibility) ==========
   images: { type: [String], default: [] },

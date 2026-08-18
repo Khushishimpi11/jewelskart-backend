@@ -244,6 +244,16 @@ router.post("/add-with-images", upload.fields([
       images: finalImages
     });
 
+    if (productData.coupleRing) {
+      product.coupleRing = {
+        womenPrice: Number(productData.coupleRing.womenPrice) || 0,
+        womenWeight: Number(productData.coupleRing.womenWeight) || 0,
+        menPrice: Number(productData.coupleRing.menPrice) || 0,
+        menWeight: Number(productData.coupleRing.menWeight) || 0,
+      };
+      product.markModified('coupleRing');
+    }
+
     await product.save();
     console.log("✅ Product saved with", galleryImages.length, "images");
 
@@ -388,19 +398,30 @@ router.put("/:id/with-images", upload.fields([
     }
 
     // Update product with REPLACED images array
+    const updatePayload = {
+      ...productData,
+      mainImage: mainImage,
+      galleryImages: galleryImages,
+      productVideo: productVideo,
+      images: finalImages,
+    };
+
+    if (productData.coupleRing) {
+      updatePayload.coupleRing = {
+        womenPrice: Number(productData.coupleRing.womenPrice) || 0,
+        womenWeight: Number(productData.coupleRing.womenWeight) || 0,
+        menPrice: Number(productData.coupleRing.menPrice) || 0,
+        menWeight: Number(productData.coupleRing.menWeight) || 0,
+      };
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
-      {
-        ...productData,
-        mainImage: mainImage,
-        galleryImages: galleryImages,
-        productVideo: productVideo,
-        images: finalImages,
-      },
+      { $set: updatePayload },
       { new: true, runValidators: true }
     );
 
-    console.log(`✅ Product updated with ${galleryImages.length} gallery images and ${finalImages.length} total images`);
+    console.log(`✅ Product updated with ${galleryImages.length} gallery images and coupleRing:`, updatedProduct?.coupleRing);
 
     if (oldProduct.category !== updatedProduct.category) {
       await updateCategoryProductCount(oldProduct.category);

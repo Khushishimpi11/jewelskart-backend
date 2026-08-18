@@ -68,6 +68,8 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       let productImageUrl = "";
       let dbProductId = null;
 
+      const ringOption = item.ringOption || item.selectedRingOption || "";
+
       if (product) {
         if (product.isAvailableForOrder === false) {
           return res.status(400).json({
@@ -75,7 +77,23 @@ router.post("/create", protect, customerOnly, async (req, res) => {
             message: `${product.name} is currently not available for order.`
           });
         }
-        itemPrice = product.price;
+        
+        // Calculate price based on coupleRing option if applicable
+        if (ringOption && product.coupleRing && (product.coupleRing.womenPrice || product.coupleRing.menPrice)) {
+          if (ringOption.includes("Women")) {
+            itemPrice = product.coupleRing.womenPrice || Number(item.price) || product.price;
+          } else if (ringOption.includes("Men")) {
+            itemPrice = product.coupleRing.menPrice || Number(item.price) || product.price;
+          } else {
+            // Both Rings (Couple Set)
+            itemPrice = (product.coupleRing.womenPrice + product.coupleRing.menPrice) || Number(item.price) || product.price;
+          }
+        } else if (item.price && Number(item.price) > 0) {
+          itemPrice = Number(item.price);
+        } else {
+          itemPrice = product.price;
+        }
+
         gstPercent = product.gst !== undefined ? product.gst : 3;
         productName = product.name;
         productSku = product.sku || product._id.toString();
@@ -108,11 +126,13 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         price: itemPrice,
         total: itemTotal,
         size: item.size || item.selectedSize || "",
+        material: item.material || item.selectedMaterial || item.metal || "",
+        ringOption: ringOption,
         gstPercent,
         gstAmount
       });
 
-      console.log(`📦 Order item processed: ${productName}, Size: ${item.size || item.selectedSize || 'Not specified'}, GST: ${gstPercent}%`);
+      console.log(`📦 Order item processed: ${productName}, Ring Option: ${ringOption || 'None'}, Size: ${item.size || item.selectedSize || 'Not specified'}, Metal: ${item.material || item.selectedMaterial || item.metal || 'Not specified'}, GST: ${gstPercent}%`);
     }
 
     // Fixed ₹1,200 shipping pan-India (one-time per order)
@@ -224,6 +244,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
           quantity: item.quantity,
           price: item.price,
           size: item.size || "",
+          material: item.material || "",
           productImage: item.productImage || "",
           productSku: item.productSku
         }));
@@ -376,6 +397,7 @@ router.post("/update-payment-status", protect, async (req, res) => {
         quantity: item.quantity,
         price: item.price,
         size: item.size || "",
+        material: item.material || "",
         productImage: item.productImage || "",
         productSku: item.productSku
       }));
@@ -685,5 +707,7 @@ router.post("/admin/sync-customers", protect, adminOnly, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+module.exports = router;
 
 module.exports = router;

@@ -33,6 +33,8 @@ const orderSchema = new mongoose.Schema({
     price: { type: Number, required: true },
     total: { type: Number, required: true },
     size: { type: String, default: "" },
+    material: { type: String, default: "" },
+    ringOption: { type: String, default: "" },
     priceExclGst: { type: Number, default: 0 },
     gstPercent: { type: Number, default: 3 },
     gstAmount: { type: Number, default: 0 }

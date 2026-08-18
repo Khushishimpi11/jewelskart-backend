@@ -33,6 +33,7 @@ const getOrderConfirmationEmailHTML = (orderData) => {
         <strong style="color: #333;">${item.name}</strong><br/>
         <span style="color: #666; font-size: 12px;">Quantity: ${item.quantity}</span>
         ${item.size ? `<br/><span style="color: #666; font-size: 12px;">Size: ${item.size}</span>` : ''}
+        ${item.material ? `<br/><span style="color: #666; font-size: 12px;">Metal: ${item.material}</span>` : ''}
         <br/><span style="color: #888; font-size: 11px;">SKU: ${item.sku || 'N/A'}</span>
       </td>
       <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: ${brandColor};">
@@ -295,12 +296,13 @@ const sendOrderConfirmationEmail = async (orderData) => {
       customerEmail,
       customerPhone: orderData.customerPhone,
       items: items.map(item => ({
-        name: item.productName,
+        name: item.productName || item.name,
         quantity: item.quantity,
         price: item.price,
         size: item.size,
-        image: item.productImage,
-        sku: item.productSku
+        material: item.material,
+        image: item.productImage || item.image,
+        sku: item.productSku || item.sku
       })),
       subtotal: orderData.subtotal,
       shippingCharge: orderData.shippingCharge,
