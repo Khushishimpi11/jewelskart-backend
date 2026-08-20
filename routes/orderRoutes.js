@@ -117,6 +117,24 @@ router.post("/create", protect, customerOnly, async (req, res) => {
       const gstAmount = Number((itemTotal * gstPercent / 100).toFixed(2));
       totalGstAmount += gstAmount;
 
+      let itemSize = item.size || item.selectedSize || "";
+      if (ringOption && itemSize && itemSize.toLowerCase() !== "free size" && !itemSize.includes("Women:") && !itemSize.includes("Men:")) {
+        const rawSizeVal = itemSize.replace(/^Size\s*/i, "").trim();
+        const opt = ringOption.toLowerCase();
+        if (opt.includes("women")) {
+          itemSize = `Women: Size ${rawSizeVal}`;
+        } else if (opt.includes("men")) {
+          itemSize = `Men: Size ${rawSizeVal}`;
+        } else if (opt.includes("both") || opt.includes("couple")) {
+          if (rawSizeVal.includes(",") || rawSizeVal.includes("/")) {
+            const parts = rawSizeVal.split(/[,/]/).map(p => p.trim().replace(/^Size\s*/i, ""));
+            if (parts.length >= 2) {
+              itemSize = `Women: Size ${parts[0]}, Men: Size ${parts[1]}`;
+            }
+          }
+        }
+      }
+
       orderItems.push({
         productId: dbProductId,
         productName: productName,
@@ -125,14 +143,14 @@ router.post("/create", protect, customerOnly, async (req, res) => {
         quantity: item.quantity,
         price: itemPrice,
         total: itemTotal,
-        size: item.size || item.selectedSize || "",
+        size: itemSize,
         material: item.material || item.selectedMaterial || item.metal || "",
         ringOption: ringOption,
         gstPercent,
         gstAmount
       });
 
-      console.log(`📦 Order item processed: ${productName}, Ring Option: ${ringOption || 'None'}, Size: ${item.size || item.selectedSize || 'Not specified'}, Metal: ${item.material || item.selectedMaterial || item.metal || 'Not specified'}, GST: ${gstPercent}%`);
+      console.log(`📦 Order item processed: ${productName}, Ring Option: ${ringOption || 'None'}, Size: ${itemSize || 'Not specified'}, Metal: ${item.material || item.selectedMaterial || item.metal || 'Not specified'}, GST: ${gstPercent}%`);
     }
 
     // Fixed ₹1,200 shipping pan-India (one-time per order)

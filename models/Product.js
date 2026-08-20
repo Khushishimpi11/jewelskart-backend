@@ -16,10 +16,22 @@ const specificationsSchema = new mongoose.Schema({
   ringSizes: [{ type: String }],
   gender: { type: String, default: "Women" },
   occasion: { type: String, default: "" },
-  stoneType: { type: String, default: "Diamond" },
+  stoneType: { type: String, default: "none" },
   stoneWeight: { type: Number, default: 0 },
+  diamond: { type: String, default: "" },
+  diamondWeight: { type: String, default: "" },
+  semiPreciousStone: { type: String, default: "" },
+  semiPreciousWeight: { type: String, default: "" },
+  womenDiamond: { type: String, default: "" },
+  womenDiamondWeight: { type: String, default: "" },
+  womenSemiPreciousStone: { type: String, default: "" },
+  womenSemiPreciousWeight: { type: String, default: "" },
+  menDiamond: { type: String, default: "" },
+  menDiamondWeight: { type: String, default: "" },
+  menSemiPreciousStone: { type: String, default: "" },
+  menSemiPreciousWeight: { type: String, default: "" },
   warranty: { type: String, default: "" }
-});
+}, { strict: false });
 
 // Care Instructions Schema
 const careInstructionsSchema = new mongoose.Schema({
@@ -74,8 +86,16 @@ const coupleRingDetailsSchema = new mongoose.Schema({
   womenPrice: { type: Number, default: 0 },
   womenWeight: { type: Number, default: 0 },
   menPrice: { type: Number, default: 0 },
-  menWeight: { type: Number, default: 0 }
-}, { _id: false });
+  menWeight: { type: Number, default: 0 },
+  womenDiamond: { type: String, default: "" },
+  womenDiamondWeight: { type: String, default: "" },
+  womenSemiPreciousStone: { type: String, default: "" },
+  womenSemiPreciousWeight: { type: String, default: "" },
+  menDiamond: { type: String, default: "" },
+  menDiamondWeight: { type: String, default: "" },
+  menSemiPreciousStone: { type: String, default: "" },
+  menSemiPreciousWeight: { type: String, default: "" },
+}, { _id: false, strict: false });
 
 // Main Product Schema
 const productSchema = new mongoose.Schema({

@@ -87,4 +87,10 @@ const returnRequestSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
+// Indexes to enable fast indexed sorting and prevent MongoDB 32MB in-memory sort errors
+returnRequestSchema.index({ createdAt: -1 });
+returnRequestSchema.index({ customerId: 1, createdAt: -1 });
+returnRequestSchema.index({ status: 1, createdAt: -1 });
+returnRequestSchema.index({ orderId: 1 });
+
 module.exports = mongoose.model("ReturnRequest", returnRequestSchema);

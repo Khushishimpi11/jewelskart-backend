@@ -20,6 +20,35 @@ const logoUrl = "https://res.cloudinary.com/dkawppfwu/image/upload/v1777292088/l
 // Brand Color
 const brandColor = "#612030";
 
+const formatRingSize = (size, ringOption) => {
+  if (!size || size.trim() === '' || size.trim().toLowerCase() === 'free size') {
+    return 'Free Size';
+  }
+  const cleanSize = size.trim();
+  if (cleanSize.includes('Women:') || cleanSize.includes('Men:')) {
+    return cleanSize;
+  }
+  const rawSizeVal = cleanSize.replace(/^Size\s*/i, '').trim();
+  if (ringOption) {
+    const opt = ringOption.toLowerCase();
+    if (opt.includes('women')) {
+      return `Women: Size ${rawSizeVal}`;
+    }
+    if (opt.includes('men')) {
+      return `Men: Size ${rawSizeVal}`;
+    }
+    if (opt.includes('both') || opt.includes('couple')) {
+      if (rawSizeVal.includes(',') || rawSizeVal.includes('/')) {
+        const parts = rawSizeVal.split(/[,/]/).map(p => p.trim().replace(/^Size\s*/i, ''));
+        if (parts.length >= 2) {
+          return `Women: Size ${parts[0]}, Men: Size ${parts[1]}`;
+        }
+      }
+    }
+  }
+  return cleanSize;
+};
+
 // ============ ORDER CONFIRMATION EMAIL TEMPLATE ============
 const getOrderConfirmationEmailHTML = (orderData) => {
   const { orderNumber, customerName, items, totalAmount, shippingAddress, paymentMethod, orderDate, trackingLink } = orderData;
@@ -32,7 +61,7 @@ const getOrderConfirmationEmailHTML = (orderData) => {
       <td style="padding: 15px 10px;">
         <strong style="color: #333;">${item.name}</strong><br/>
         <span style="color: #666; font-size: 12px;">Quantity: ${item.quantity}</span>
-        ${item.size ? `<br/><span style="color: #666; font-size: 12px;">Size: ${item.size}</span>` : ''}
+        ${item.size ? `<br/><span style="color: #666; font-size: 12px;">Size: ${formatRingSize(item.size, item.ringOption)}</span>` : ''}
         ${item.material ? `<br/><span style="color: #666; font-size: 12px;">Metal: ${item.material}</span>` : ''}
         <br/><span style="color: #888; font-size: 11px;">SKU: ${item.sku || 'N/A'}</span>
       </td>

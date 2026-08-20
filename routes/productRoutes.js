@@ -250,8 +250,35 @@ router.post("/add-with-images", upload.fields([
         womenWeight: Number(productData.coupleRing.womenWeight) || 0,
         menPrice: Number(productData.coupleRing.menPrice) || 0,
         menWeight: Number(productData.coupleRing.menWeight) || 0,
+        womenDiamond: productData.coupleRing.womenDiamond || "",
+        womenDiamondWeight: productData.coupleRing.womenDiamondWeight !== undefined && productData.coupleRing.womenDiamondWeight !== null ? String(productData.coupleRing.womenDiamondWeight) : "",
+        womenSemiPreciousStone: productData.coupleRing.womenSemiPreciousStone || "",
+        womenSemiPreciousWeight: productData.coupleRing.womenSemiPreciousWeight !== undefined && productData.coupleRing.womenSemiPreciousWeight !== null ? String(productData.coupleRing.womenSemiPreciousWeight) : "",
+        menDiamond: productData.coupleRing.menDiamond || "",
+        menDiamondWeight: productData.coupleRing.menDiamondWeight !== undefined && productData.coupleRing.menDiamondWeight !== null ? String(productData.coupleRing.menDiamondWeight) : "",
+        menSemiPreciousStone: productData.coupleRing.menSemiPreciousStone || "",
+        menSemiPreciousWeight: productData.coupleRing.menSemiPreciousWeight !== undefined && productData.coupleRing.menSemiPreciousWeight !== null ? String(productData.coupleRing.menSemiPreciousWeight) : "",
       };
       product.markModified('coupleRing');
+    }
+
+    // ✅ Auto-sync stoneType from individual diamond/semiPreciousStone fields (standard products)
+    // This ensures the dropdown and individual fields stay consistent for ALL categories
+    if (product.specifications) {
+      const specs = product.specifications;
+      const hasDia = (specs.diamond && String(specs.diamond).toLowerCase() === 'diamond') || Number(specs.diamondWeight) > 0;
+      const hasSP = Boolean(specs.semiPreciousStone && String(specs.semiPreciousStone).trim()) || Number(specs.semiPreciousWeight) > 0;
+      const currentStoneType = specs.stoneType || 'none';
+      // Only override stoneType if individual fields have more specific info than the dropdown
+      if (hasDia || hasSP) {
+        specs.stoneType = (hasDia && hasSP) ? 'both' : hasDia ? 'diamond' : 'semi_precious';
+        product.markModified('specifications');
+      } else if (currentStoneType !== 'none') {
+        // dropdown is set to something, keep it as-is
+      } else {
+        specs.stoneType = 'none';
+        product.markModified('specifications');
+      }
     }
 
     await product.save();
@@ -407,12 +434,48 @@ router.put("/:id/with-images", upload.fields([
     };
 
     if (productData.coupleRing) {
+      const crW_Dia = productData.coupleRing.womenDiamond || "";
+      const crM_Dia = productData.coupleRing.menDiamond || "";
+      const crW_DiaW = productData.coupleRing.womenDiamondWeight !== undefined && productData.coupleRing.womenDiamondWeight !== null ? String(productData.coupleRing.womenDiamondWeight) : "";
+      const crM_DiaW = productData.coupleRing.menDiamondWeight !== undefined && productData.coupleRing.menDiamondWeight !== null ? String(productData.coupleRing.menDiamondWeight) : "";
+      const crW_SP = productData.coupleRing.womenSemiPreciousStone || "";
+      const crM_SP = productData.coupleRing.menSemiPreciousStone || "";
+      const crW_SPW = productData.coupleRing.womenSemiPreciousWeight !== undefined && productData.coupleRing.womenSemiPreciousWeight !== null ? String(productData.coupleRing.womenSemiPreciousWeight) : "";
+      const crM_SPW = productData.coupleRing.menSemiPreciousWeight !== undefined && productData.coupleRing.menSemiPreciousWeight !== null ? String(productData.coupleRing.menSemiPreciousWeight) : "";
+
       updatePayload.coupleRing = {
         womenPrice: Number(productData.coupleRing.womenPrice) || 0,
         womenWeight: Number(productData.coupleRing.womenWeight) || 0,
         menPrice: Number(productData.coupleRing.menPrice) || 0,
         menWeight: Number(productData.coupleRing.menWeight) || 0,
+        womenDiamond: crW_Dia,
+        womenDiamondWeight: crW_DiaW,
+        womenSemiPreciousStone: crW_SP,
+        womenSemiPreciousWeight: crW_SPW,
+        menDiamond: crM_Dia,
+        menDiamondWeight: crM_DiaW,
+        menSemiPreciousStone: crM_SP,
+        menSemiPreciousWeight: crM_SPW,
       };
+
+      const hasDia = (crW_Dia && crW_Dia.toLowerCase() === 'diamond') || (crM_Dia && crM_Dia.toLowerCase() === 'diamond') || Number(crW_DiaW) > 0 || Number(crM_DiaW) > 0;
+      const hasSP = Boolean(crW_SP || crM_SP || Number(crW_SPW) > 0 || Number(crM_SPW) > 0);
+      const computedStoneType = (hasDia && hasSP) ? 'both' : hasDia ? 'diamond' : hasSP ? 'semi_precious' : 'none';
+
+      if (updatePayload.specifications) {
+        updatePayload.specifications.stoneType = computedStoneType;
+      }
+    } else if (updatePayload.specifications) {
+      // ✅ Auto-sync stoneType for standard (non-couple) products on update
+      const specs = updatePayload.specifications;
+      const hasDia = (specs.diamond && String(specs.diamond).toLowerCase() === 'diamond') || Number(specs.diamondWeight) > 0;
+      const hasSP = Boolean(specs.semiPreciousStone && String(specs.semiPreciousStone).trim()) || Number(specs.semiPreciousWeight) > 0;
+      if (hasDia || hasSP) {
+        specs.stoneType = (hasDia && hasSP) ? 'both' : hasDia ? 'diamond' : 'semi_precious';
+      } else if (!specs.stoneType || specs.stoneType === '') {
+        specs.stoneType = 'none';
+      }
+      // If user explicitly set stoneType dropdown to diamond/semi_precious/both, preserve it
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -579,7 +642,10 @@ router.get("/", async (req, res) => {
     const { category, status, search, limit } = req.query;
 
     let query = {};
-    if (category) query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+    if (category) {
+      const cleanCat = category.trim().replace(/[-_\s]+/g, '[-_\\s]?').replace(/s$/i, 's?');
+      query.category = { $regex: new RegExp(`^${cleanCat}$`, 'i') };
+    }
     if (status) query.status = status;
     if (search) {
       query.$or = [

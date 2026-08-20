@@ -558,9 +558,8 @@ router.get("/available-products", protect, customerOnly, async (req, res) => {
     const { category, maxPrice, search, excludeProductId } = req.query;
 
     let query = {
-      isActive: true,
-      status: "active",
-      stock: { $gt: 0 }
+      status: "Published",
+      isAvailableForOrder: { $ne: false }
     };
 
     if (category) query.category = category;
