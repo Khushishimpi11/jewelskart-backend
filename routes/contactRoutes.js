@@ -305,7 +305,7 @@ const getPartnerReplyTemplate = (ownerName, businessName) => `
 </html>
 `;
 
-// ✅ CONTACT FORM ROUTE - with correct sender name
+// ✅ CONTACT FORM ROUTE - sends notification to business email and auto-reply to user
 router.post("/contact", async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
@@ -314,22 +314,26 @@ router.post("/contact", async (req, res) => {
       return res.status(400).json({ success: false, message: "Please fill all required fields" });
     }
 
-    // ✅ Sender name changed to "JewelsKart Website"
+    const businessRecipient = process.env.BUSINESS_EMAIL || process.env.CONTACT_EMAIL || "business@jewelskartindia.com";
+
+    // ✅ Send customer inquiry notification to business email
     await transporter.sendMail({
-      from: `"JewelsKart Website" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
+      from: `"JewelsKart Website" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
+      to: businessRecipient,
+      replyTo: email,
       subject: `📧 New Contact: ${subject || "Customer Inquiry"} - JewelsKart`,
       html: getProfessionalEmailTemplate('contact', { name, email, phone, subject, message }),
     });
 
+    // Auto-reply to customer
     await transporter.sendMail({
-      from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
+      from: `"JewelsKart" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: email,
       subject: "✨ We've received your message - JewelsKart",
       html: getCustomerReplyTemplate(name),
     });
 
-    console.log(`✅ Contact form submitted by: ${email}`);
+    console.log(`✅ Contact form submitted by: ${email} -> Forwarded to: ${businessRecipient}`);
     res.status(200).json({ success: true, message: "Your message has been sent! Our team will respond within 24 hours." });
 
   } catch (error) {
@@ -338,7 +342,7 @@ router.post("/contact", async (req, res) => {
   }
 });
 
-// ✅ PARTNER FORM ROUTE - with correct sender name
+// ✅ PARTNER FORM ROUTE - sends partnership request to business email and auto-reply to partner
 router.post("/partner", async (req, res) => {
   try {
     const { businessName, ownerName, email, phone, businessType, city, products, message } = req.body;
@@ -347,22 +351,26 @@ router.post("/partner", async (req, res) => {
       return res.status(400).json({ success: false, message: "Please fill all required fields" });
     }
 
-    // ✅ Sender name changed to "JewelsKart Website"
+    const businessRecipient = process.env.BUSINESS_EMAIL || process.env.PARTNER_EMAIL || "business@jewelskartindia.com";
+
+    // ✅ Send partnership request notification to business email
     await transporter.sendMail({
-      from: `"JewelsKart Website" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
+      from: `"JewelsKart Website" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
+      to: businessRecipient,
+      replyTo: email,
       subject: `🤝 New Partnership Request: ${businessName} - JewelsKart`,
       html: getProfessionalEmailTemplate('partner', { businessName, ownerName, email, phone, businessType, city, products, message }),
     });
 
+    // Auto-reply to partner
     await transporter.sendMail({
-      from: `"JewelsKart" <${process.env.EMAIL_USER}>`,
+      from: `"JewelsKart" <${process.env.EMAIL_USER || "jewelskartindia16@gmail.com"}>`,
       to: email,
       subject: "🤝 Thank you for your partnership interest - JewelsKart",
       html: getPartnerReplyTemplate(ownerName, businessName),
     });
 
-    console.log(`✅ Partnership request from: ${businessName} (${email})`);
+    console.log(`✅ Partnership request from: ${businessName} (${email}) -> Forwarded to: ${businessRecipient}`);
     res.status(200).json({ success: true, message: "Partnership application submitted! Our team will contact you soon." });
 
   } catch (error) {

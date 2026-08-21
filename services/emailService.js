@@ -294,7 +294,7 @@ const getOrderConfirmationEmailHTML = (orderData) => {
     
     <div class="footer">
       <p>&copy; 2024 JewelsKart. All rights reserved.</p>
-      <p>Need help? Contact us at <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+      <p>Need help? Contact us at <a href="mailto:info@jewelskartindia.com" style="color: ${brandColor};">info@jewelskartindia.com</a></p>
       <p>Visit our website: <a href="${process.env.WEBSITE_URL || 'http://localhost:8081'}" style="color: ${brandColor};">www.jewelskartindia.com</a></p>
     </div>
   </div>
@@ -399,7 +399,7 @@ const getAdminPasswordResetEmailHTML = (name, resetUrl) => {
               <p style="color: #555; line-height: 1.6; font-size: 14px;">Or copy this link: <br><a href="${resetUrl}" style="color: ${brandColor};">${resetUrl}</a></p>
               <p style="color: #e74c3c; font-size: 12px; margin-top: 20px;">⚠️ This link expires in <strong>15 minutes</strong>.</p>
               <hr style="margin: 25px 0 15px;">
-              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:info@jewelskartindia.com" style="color: ${brandColor};">info@jewelskartindia.com</a></p>
             </td>
           </tr>
           <tr>
@@ -447,7 +447,7 @@ const getCustomerPasswordResetEmailHTML = (name, resetUrl) => {
               <p style="color: #555; line-height: 1.6; font-size: 14px;">Or copy this link: <br><a href="${resetUrl}" style="color: ${brandColor};">${resetUrl}</a></p>
               <p style="color: #e74c3c; font-size: 12px; margin-top: 20px;">⚠️ This link expires in <strong>15 minutes</strong>.</p>
               <hr style="margin: 25px 0 15px;">
-              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:info@jewelskartindia.com" style="color: ${brandColor};">info@jewelskartindia.com</a></p>
             </td>
           </tr>
           <tr>
@@ -498,7 +498,7 @@ const getCustomerWelcomeEmailHTML = (name) => {
                 <a href="${process.env.WEBSITE_URL || "http://localhost:8081"}/shop" style="background-color: ${brandColor}; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Start Shopping →</a>
               </div>
               <hr>
-              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+              <p style="color: #888; font-size: 12px;">Need help? <a href="mailto:info@jewelskartindia.com" style="color: ${brandColor};">info@jewelskartindia.com</a></p>
             </td>
           </tr>
           <tr>

@@ -312,7 +312,7 @@ const getOrderConfirmationEmailHTML = (orderData) => {
     
     <div class="footer">
       <p>&copy; 2024 JewelsKart. All rights reserved.</p>
-      <p>Need help? Contact us at <a href="mailto:support@jewelskartindia.com" style="color: ${brandColor};">support@jewelskartindia.com</a></p>
+      <p>Need help? Contact us at <a href="mailto:info@jewelskartindia.com" style="color: ${brandColor};">info@jewelskartindia.com</a></p>
     </div>
   </div>
 </body>

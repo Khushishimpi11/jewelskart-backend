@@ -77,7 +77,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
             message: `${product.name} is currently not available for order.`
           });
         }
-        
+
         // Calculate price based on coupleRing option if applicable
         if (ringOption && product.coupleRing && (product.coupleRing.womenPrice || product.coupleRing.menPrice)) {
           if (ringOption.includes("Women")) {
@@ -154,7 +154,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     }
 
     // Fixed ₹1,200 shipping pan-India (one-time per order)
-    const shippingCharge = 1200;
+    const shippingCharge = 0;
     const tax = Number(totalGstAmount.toFixed(2));
     // Total = product subtotal + GST (exclusive) + shipping
     const totalAmount = subtotal + tax + shippingCharge;
