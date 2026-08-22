@@ -92,11 +92,19 @@ router.get("/tree", async (req, res) => {
         image: category.image,
         icon: category.icon,
         description: category.description,
+        bannerImage: category.bannerImage || "",
+        bannerTitle: category.bannerTitle || "",
+        bannerSubtitle: category.bannerSubtitle || "",
+        bannerButtonText: category.bannerButtonText || "",
+        bannerButtonLink: category.bannerButtonLink || "",
+        showInBanner: category.showInBanner !== undefined ? category.showInBanner : true,
         productCount: productCount,
         subcategories: subcategories.map(sub => ({
           _id: sub._id,
           name: sub.name,
           slug: sub.slug,
+          image: sub.image,
+          bannerImage: sub.bannerImage || "",
           productCount: 0
         }))
       };
@@ -142,6 +150,12 @@ router.get("/:id", async (req, res) => {
         description: category.description,
         image: category.image,
         icon: category.icon,
+        bannerImage: category.bannerImage || "",
+        bannerTitle: category.bannerTitle || "",
+        bannerSubtitle: category.bannerSubtitle || "",
+        bannerButtonText: category.bannerButtonText || "",
+        bannerButtonLink: category.bannerButtonLink || "",
+        showInBanner: category.showInBanner !== undefined ? category.showInBanner : true,
         level: category.level,
         featured: category.featured,
         isActive: category.isActive,
@@ -160,7 +174,21 @@ router.get("/:id", async (req, res) => {
 // CREATE category
 router.post("/admin/create", async (req, res) => {
   try {
-    const { name, description, image, icon, parentCategory, featured, isActive } = req.body;
+    const {
+      name,
+      description,
+      image,
+      icon,
+      bannerImage,
+      bannerTitle,
+      bannerSubtitle,
+      bannerButtonText,
+      bannerButtonLink,
+      showInBanner,
+      parentCategory,
+      featured,
+      isActive
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, message: "Category name is required" });
@@ -185,6 +213,12 @@ router.post("/admin/create", async (req, res) => {
       description: description || "",
       image: image || "",
       icon: icon || "",
+      bannerImage: bannerImage || "",
+      bannerTitle: bannerTitle || "",
+      bannerSubtitle: bannerSubtitle || "",
+      bannerButtonText: bannerButtonText || "",
+      bannerButtonLink: bannerButtonLink || "",
+      showInBanner: showInBanner !== undefined ? showInBanner : true,
       parentCategory: parentCategory || null,
       level,
       featured: featured || false,
@@ -207,7 +241,21 @@ router.post("/admin/create", async (req, res) => {
 router.put("/admin/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, image, icon, parentCategory, featured, isActive } = req.body;
+    const {
+      name,
+      description,
+      image,
+      icon,
+      bannerImage,
+      bannerTitle,
+      bannerSubtitle,
+      bannerButtonText,
+      bannerButtonLink,
+      showInBanner,
+      parentCategory,
+      featured,
+      isActive
+    } = req.body;
 
     const category = await Category.findById(id);
     if (!category) {
@@ -226,6 +274,12 @@ router.put("/admin/:id", async (req, res) => {
     if (description !== undefined) category.description = description;
     if (image !== undefined) category.image = image;
     if (icon !== undefined) category.icon = icon;
+    if (bannerImage !== undefined) category.bannerImage = bannerImage;
+    if (bannerTitle !== undefined) category.bannerTitle = bannerTitle;
+    if (bannerSubtitle !== undefined) category.bannerSubtitle = bannerSubtitle;
+    if (bannerButtonText !== undefined) category.bannerButtonText = bannerButtonText;
+    if (bannerButtonLink !== undefined) category.bannerButtonLink = bannerButtonLink;
+    if (showInBanner !== undefined) category.showInBanner = showInBanner;
     if (parentCategory !== undefined) category.parentCategory = parentCategory || null;
     if (featured !== undefined) category.featured = featured;
     if (isActive !== undefined) category.isActive = isActive;

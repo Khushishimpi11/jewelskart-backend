@@ -232,6 +232,47 @@ async function createPaymentSession({
 }
 
 /**
+ * Fetch Payment Session Details directly from Zoho Payments API (Server-to-Server)
+ */
+async function fetchPaymentSessionDetails(sessionId) {
+  if (!sessionId) {
+    throw new Error('Session ID is required');
+  }
+
+  const accessToken = await getZohoAccessToken();
+  const accountId = (process.env.ZOHO_ACCOUNT_ID || '').trim();
+  const apiDomain = (process.env.ZOHO_API_DOMAIN || 'https://payments.zoho.in').trim();
+  const requestUrl = `${apiDomain}/api/v1/paymentsessions/${sessionId}?account_id=${encodeURIComponent(accountId)}`;
+
+  console.log(`🔍 [Zoho Service] Fetching payment session: ${sessionId}`);
+
+  const response = await fetch(requestUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Zoho-oauthtoken ${accessToken}`,
+      'X-com-zoho-payments-accountid': accountId,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  const rawText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Zoho returned non-JSON response (HTTP ${response.status}): ${rawText}`);
+  }
+
+  if (!response.ok || data.error || (data.code !== undefined && data.code !== 0)) {
+    const errMsg = data.message || data.error || `Zoho API returned HTTP ${response.status}`;
+    console.error(`❌ Zoho API session fetch error: ${errMsg}`);
+    throw new Error(`Failed to fetch Zoho payment session: ${errMsg}`);
+  }
+
+  return data.payments_session || data.data || data;
+}
+
+/**
  * Verify Signature Helper
  */
 function verifyZohoSignature(payloadData, signature) {
@@ -259,5 +300,6 @@ module.exports = {
   exchangeAuthCode,
   getZohoAccessToken,
   createPaymentSession,
+  fetchPaymentSessionDetails,
   verifyZohoSignature
 };

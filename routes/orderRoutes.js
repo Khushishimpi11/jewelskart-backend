@@ -154,7 +154,7 @@ router.post("/create", protect, customerOnly, async (req, res) => {
     }
 
     // Fixed ₹1,200 shipping pan-India (one-time per order)
-    const shippingCharge = 0;
+    const shippingCharge = 1200;
     const tax = Number(totalGstAmount.toFixed(2));
     // Total = product subtotal + GST (exclusive) + shipping
     const totalAmount = subtotal + tax + shippingCharge;
@@ -343,125 +343,26 @@ router.post("/create", protect, customerOnly, async (req, res) => {
   }
 });
 
-// ============ UPDATE PAYMENT STATUS AFTER SUCCESS ============
+// ============ UPDATE PAYMENT STATUS AFTER SUCCESS (IDEMPOTENT & SERVER-VERIFIED) ============
 router.post("/update-payment-status", protect, async (req, res) => {
   try {
     const { orderId, paymentId, payments_session_id, zohoSessionId, signature } = req.body;
+    const { verifyAndConfirmZohoOrder } = require('./paymentRoutes');
 
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    const signingKey = process.env.ZOHO_SIGNING_KEY;
-    let isValidSignature = true;
-    const activeSessionId = payments_session_id || zohoSessionId || order.zohoSessionId;
-
-    if (signingKey && signature) {
-      const crypto = require('crypto');
-      const body = activeSessionId ? activeSessionId + "|" + paymentId : paymentId;
-      const expectedSignature = crypto
-        .createHmac('sha256', signingKey)
-        .update(body.toString())
-        .digest('hex');
-
-      if (expectedSignature !== signature) {
-        isValidSignature = verifyZohoSignature(req.body, signature);
-      }
-    }
-
-    if (!isValidSignature) {
-      try {
-        await notificationService.sendPaymentFailed(order);
-      } catch (notifErr) {
-        console.error("Payment failed notify error:", notifErr);
-      }
-      return res.status(400).json({ success: false, message: "Invalid payment signature" });
-    }
-
-    order.paymentStatus = "SUCCESS";
-    order.paymentId = paymentId || order.paymentId;
-    if (activeSessionId) order.zohoSessionId = activeSessionId;
-    order.orderStatus = "Confirmed";
-    order.paymentDate = new Date();
-    order.statusHistory.push({
-      status: "Confirmed",
-      note: "Payment received successfully. Order confirmed.",
-      updatedBy: order.customerName,
-      date: new Date()
+    const result = await verifyAndConfirmZohoOrder({
+      orderId,
+      sessionId: payments_session_id || zohoSessionId,
+      paymentId,
+      signature,
+      payloadBody: req.body,
+      user: req.user
     });
 
-    await order.save();
-
-    const tracking = await Tracking.findOne({ orderId: order._id });
-    if (tracking) {
-      tracking.status = "CONFIRMED";
-      tracking.currentLocation = "Order Confirmed";
-      tracking.timeline.push({
-        status: "CONFIRMED",
-        location: "Order Confirmed",
-        description: "Payment received. Order confirmed.",
-        date: new Date()
-      });
-      await tracking.save();
+    if (!result.success) {
+      return res.status(result.statusCode || 400).json(result);
     }
 
-    // Send order confirmation email for online payment
-    try {
-      const customer = await Customer.findById(order.customerId);
-
-      const emailItems = order.items.map(item => ({
-        productName: item.productName,
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size || "",
-        material: item.material || "",
-        productImage: item.productImage || "",
-        productSku: item.productSku
-      }));
-
-      await sendOrderConfirmationEmail({
-        orderNumber: order.orderNumber,
-        customerEmail: order.customerEmail,
-        customerName: order.customerName,
-        customerPhone: order.customerPhone || customer?.phone || "",
-        items: emailItems,
-        subtotal: order.subtotal,
-        shippingCharge: order.shippingCharge,
-        tax: order.tax,
-        totalAmount: order.totalAmount,
-        shippingAddress: order.shippingAddress,
-        paymentMethod: order.paymentMethod,
-        createdAt: order.createdAt
-      });
-      console.log(`📧 Order confirmation email sent for order ${order.orderNumber}`);
-    } catch (emailError) {
-      console.error("❌ Email sending failed:", emailError.message);
-    }
-
-    // Notify Admins and Customer of payment success & new order
-    try {
-      await notificationService.sendNewOrder(order);
-      await notificationService.sendPaymentReceived(order);
-      await notificationService.sendToCustomer(order.userId || order.customerId, order.customerEmail, {
-        type: "payment_successful",
-        title: "Payment Successful 💳",
-        message: `Payment of ₹${order.totalAmount.toLocaleString('en-IN')} for order #${order.orderNumber} was successful.`,
-        actionLink: "/orders",
-        relatedData: { orderId: order._id }
-      });
-      await notificationService.sendCustomerOrderStatusNotification(order, "Confirmed");
-    } catch (notifErr) {
-      console.error("Order payment confirmation notify error:", notifErr);
-    }
-
-    console.log(`✅ Payment successful for order ${order.orderNumber}. Payment ID: ${paymentId}`);
-
-    res.json({
-      success: true,
-      message: "Payment verified and order confirmed",
-      order: order
-    });
+    return res.json(result);
 
   } catch (error) {
     console.error("Payment update error:", error);

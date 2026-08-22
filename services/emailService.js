@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { calculateEstimatedDelivery } = require("../utils/deliveryCalculator");
 
 const emailUser = (process.env.EMAIL_USER || "jewelskartindia16@gmail.com").trim();
 const emailPass = (process.env.EMAIL_PASS || "").replace(/\s+/g, "");
@@ -284,10 +285,10 @@ const getOrderConfirmationEmailHTML = (orderData) => {
       
       <div class="delivery-box">
         <p style="margin: 0; color: #2e7d32; font-size: 14px;">
-          <strong>📦 Estimated Delivery:</strong> ${orderData.estimatedDelivery || '5-7 business days'}
+          <strong>📦 Estimated Delivery:</strong> ${orderData.estimatedDelivery || calculateEstimatedDelivery(orderData.orderDate || new Date())} (12–15 working days)
         </p>
         <p style="margin: 5px 0 0; color: #555; font-size: 12px;">
-          You will receive another email when your order is shipped.
+          Working days: Monday to Friday. Products are prepared after receiving the order.
         </p>
       </div>
     </div>
@@ -316,8 +317,7 @@ const sendOrderConfirmationEmail = async (orderData) => {
     const trackingId = orderNumber;  // 👈 THIS WAS MISSING!
     const trackingLink = `${process.env.WEBSITE_URL || 'http://localhost:8081'}/track-order?id=${trackingId}`;
 
-    const estimatedDelivery = new Date();
-    estimatedDelivery.setDate(estimatedDelivery.getDate() + 7);
+    const estimatedDelivery = calculateEstimatedDelivery(createdAt || new Date());
 
     const emailData = {
       orderNumber,
@@ -341,7 +341,7 @@ const sendOrderConfirmationEmail = async (orderData) => {
       paymentMethod,
       orderDate: createdAt,
       trackingLink,
-      estimatedDelivery: estimatedDelivery.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+      estimatedDelivery: orderData.estimatedDelivery || `${estimatedDelivery} (12–15 working days)`
     };
 
     const htmlContent = getOrderConfirmationEmailHTML(emailData);

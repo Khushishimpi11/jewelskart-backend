@@ -15,6 +15,13 @@ const categorySchema = new mongoose.Schema({
   description: { type: String, default: "" },
   image: { type: String, default: "" },
   icon: { type: String, default: "" },
+  // Category Banner Section Fields (different from category thumbnail image)
+  bannerImage: { type: String, default: "" },
+  bannerTitle: { type: String, default: "" },
+  bannerSubtitle: { type: String, default: "" },
+  bannerButtonText: { type: String, default: "" },
+  bannerButtonLink: { type: String, default: "" },
+  showInBanner: { type: Boolean, default: true },
   parentCategory: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Category",
