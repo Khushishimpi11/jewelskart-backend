@@ -635,6 +635,48 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// ============ REORDER PRODUCTS (Bulk Update sortOrder) ============
+router.put("/reorder", async (req, res) => {
+  try {
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Items array with product IDs and sortOrder is required"
+      });
+    }
+
+    const bulkOps = items
+      .filter(item => (item.id || item._id) && typeof item.sortOrder === "number")
+      .map(item => ({
+        updateOne: {
+          filter: { _id: item.id || item._id },
+          update: { $set: { sortOrder: item.sortOrder } }
+        }
+      }));
+
+    if (bulkOps.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid items found to update"
+      });
+    }
+
+    const result = await Product.bulkWrite(bulkOps);
+    console.log(`✅ Bulk reordered ${result.modifiedCount} products`);
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully updated order for ${bulkOps.length} products`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error("❌ Error reordering products:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ============ OTHER ROUTES ============
 
 router.get("/", async (req, res) => {
@@ -655,13 +697,18 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    let productsQuery = Product.find(query);
+    let productsQuery = Product.find(query).sort({ sortOrder: 1, createdAt: -1 });
     if (limit) {
       productsQuery = productsQuery.limit(parseInt(limit));
     }
 
     const products = await productsQuery;
     const sortedProducts = products.sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : 999999;
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : 999999;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -672,6 +719,36 @@ router.get("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching products:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.patch("/:id/sort-order", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sortOrder } = req.body;
+
+    if (sortOrder === undefined || typeof sortOrder !== "number") {
+      return res.status(400).json({ success: false, message: "Valid sortOrder number is required" });
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { sortOrder },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Sort order updated successfully",
+      product
+    });
+  } catch (error) {
+    console.error("Error updating sort order:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

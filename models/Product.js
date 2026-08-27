@@ -144,6 +144,7 @@ const productSchema = new mongoose.Schema({
   bestSeller: { type: Boolean, default: false },
   gst: { type: Number, default: 3 },
   ringSizes: [{ type: String }],
+  sortOrder: { type: Number, default: 999999 },
 
   goldDetails: { type: goldDetailsSchema, default: () => ({}) },
   specifications: { type: specificationsSchema, default: () => ({}) },
@@ -230,7 +231,8 @@ productSchema.methods.getImageForSize = function (size = 'medium') {
 
 // Indexes
 productSchema.index({ name: 'text', sku: 'text', brand: 'text' });
-productSchema.index({ category: 1 });
+productSchema.index({ category: 1, sortOrder: 1, createdAt: -1 });
+productSchema.index({ sortOrder: 1 });
 productSchema.index({ status: 1 });
 productSchema.index({ 'mainImage.publicId': 1 });
 productSchema.index({ 'reviews.rating': -1 });
